@@ -1,8 +1,8 @@
 // 디자인 토큰
-// 글자 크기, 슬라이더 모양 (버튼 모양은 widgets/primary_button.dart, secondary_button.dart)
+// 글자 크기, 슬라이더 모양 (버튼 모양은 shared/widgets/primary_button.dart, secondary_button.dart)
 import 'package:material_ui/material_ui.dart';
 
-import 'app_colors.dart';
+import '../shared/app_colors.dart';
 
 abstract final class AppTheme {
   static final ThemeData light = ThemeData(
