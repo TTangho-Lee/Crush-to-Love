@@ -4,11 +4,11 @@
 // 다른 화면에서 탭 바꾸기: MainShell.tabIndex.value = 1
 import 'package:material_ui/material_ui.dart';
 
-import '../screens/conversation/conversation_input_screen.dart';
-import '../screens/date/date_prep_screen.dart';
-import '../screens/home/home_screen.dart';
-import '../screens/roadmap/roadmap_screen.dart';
-import '../widgets/bottom_tab_bar.dart';
+import '../analysis/chat/conversation_input_screen.dart';
+import '../analysis/date/date_prep_screen.dart';
+import '../mission/home/home_screen.dart';
+import '../mission/roadmap/roadmap_screen.dart';
+import '../shared/widgets/bottom_tab_bar.dart';
 
 class MainShell extends StatelessWidget {
   const MainShell({super.key});
