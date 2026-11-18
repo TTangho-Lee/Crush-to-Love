@@ -1,68 +1,113 @@
+// 앱 데이터. 화면에서는 AppScope.of(context)로 꺼내 씀
+//   final store = AppScope.of(context);
+//   Text(store.profile.goal.label)
+// 지금은 전부 가짜 데이터. 메서드 이름과 주고받는 모양만 약속
 import 'package:flutter/widgets.dart';
 
-import '../models/mission.dart';
-import '../models/target_profile.dart';
-import '../services/mission_generator.dart';
-import '../services/progress_calculator.dart';
+import 'fake_data.dart';
+import 'models.dart';
 
-/// 앱 상태. 지금은 메모리에만 저장(앱 종료 시 초기화).
-/// TODO: drift(SQLite) 로컬 DB로 교체.
 class AppStore extends ChangeNotifier {
-  AppStore({
-    MissionGenerator? generator,
-    ProgressCalculator? progressCalculator,
-  })  : _generator = generator ?? DummyMissionGenerator(),
-        _progress = progressCalculator ?? ProgressCalculator();
+  Profile _profile = fakeProfile();
+  List<WeekPlan> _weeks = fakeWeeks;
+  ChatStats _chatStats = fakeChatStats;
+  DateGuide _dateGuide = fakeDateGuide;
 
-  final MissionGenerator _generator;
-  final ProgressCalculator _progress;
+  // ---------- 읽기 ----------
 
-  TargetProfile? profile;
-  Mission? currentMission;
-  final List<Mission> pastMissions = [];
-  final List<MissionResult> results = [];
-  bool isGenerating = false;
+  /// 온보딩 입력값
+  Profile get profile => _profile;
 
-  Future<void> saveProfile(TargetProfile newProfile) async {
-    profile = newProfile.copyWith(
-      progress: _progress.calculate(newProfile, results),
+  /// D-Day까지 남은 날 (20이면 'D-20')
+  int get daysLeft {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final d = _profile.dDay;
+    return DateTime(d.year, d.month, d.day).difference(today).inDays;
+  }
+
+  /// 주차별 로드맵 (피그마 8번, 14~16번)
+  List<WeekPlan> get weeks => _weeks;
+
+  /// 지금 주차 (피그마 8번 분홍 카드)
+  WeekPlan get currentWeek {
+    final left = daysLeft;
+    return _weeks.firstWhere(
+      (w) => left <= w.fromDDay && left >= w.toDDay,
+      orElse: () => _weeks.first,
+    );
+  }
+
+  /// 오늘의 미션 = 지금 주차 미션 (피그마 7번)
+  List<Mission> get todayMissions => currentWeek.missions;
+
+  /// 완료한 미션 수 (전체 주차)
+  int get doneCount => _weeks.fold(0, (sum, w) => sum + w.doneCount);
+
+  /// 전체 미션 수
+  int get totalCount => _weeks.fold(0, (sum, w) => sum + w.missions.length);
+
+  /// 미션 진행률 0 ~ 1 (피그마 7번 '미션 진행률 · 11%')
+  double get progress => totalCount == 0 ? 0 : doneCount / totalCount;
+
+  /// 마지막 대화 분석 결과 (피그마 12번)
+  ChatStats get chatStats => _chatStats;
+
+  /// 마지막 데이트 가이드 (피그마 13번)
+  DateGuide get dateGuide => _dateGuide;
+
+  // ---------- 바꾸기 ----------
+
+  /// 온보딩 완료 (피그마 6번 '내 로드맵 만들기')
+  /// 가짜: 입력값만 저장, 로드맵은 예시 그대로
+  void saveOnboarding(Profile profile) {
+    _profile = profile;
+    notifyListeners();
+  }
+
+  /// 미션 완료 / 미완료 전환 (피그마 7번 체크 칸)
+  void toggleMission(String missionId) {
+    _weeks = [
+      for (final w in _weeks)
+        w.copyWith(
+          missions: [
+            for (final m in w.missions)
+              m.id == missionId ? m.copyWith(done: !m.done) : m,
+          ],
+        ),
+    ];
+    notifyListeners();
+  }
+
+  /// 친밀도 · 목표 바꾸기 (피그마 11번 '변경 저장하고 미션 다시 짜기')
+  /// 가짜: 입력값만 바꾸고 미션은 그대로
+  void updateRelation({required Intimacy intimacy, required Goal goal}) {
+    _profile = _profile.copyWith(intimacy: intimacy, goal: goal);
+    notifyListeners();
+  }
+
+  /// 카톡 대화 분석 (피그마 9번 '대화 분석하기')
+  /// 가짜: 입력과 상관없이 예시 결과
+  ChatStats analyzeChat(String chatText, {String? myName}) {
+    _chatStats = fakeChatStats;
+    notifyListeners();
+    return _chatStats;
+  }
+
+  /// 데이트 가이드 만들기 (피그마 10번 '준비 가이드 보기')
+  /// 가짜: 장소 · 날씨만 바꾸고 내용은 예시 그대로
+  DateGuide buildDateGuide({required String place, required String weather}) {
+    _dateGuide = DateGuide(
+      place: place,
+      weather: weather,
+      items: fakeDateGuide.items,
     );
     notifyListeners();
-    if (currentMission == null) await generateNextMission();
-  }
-
-  Future<void> generateNextMission() async {
-    final p = profile;
-    if (p == null) return;
-    isGenerating = true;
-    notifyListeners();
-    currentMission = await _generator.generate(p, results);
-    isGenerating = false;
-    notifyListeners();
-  }
-
-  /// 결과 기록 → 친밀도 재확인 반영 → 진척도 갱신 → 다음 미션.
-  Future<void> submitResult(MissionResult result, int newIntimacy) async {
-    final mission = currentMission;
-    final p = profile;
-    if (mission == null || p == null) return;
-
-    pastMissions.add(mission.copyWith(
-      status: result.success ? MissionStatus.success : MissionStatus.failed,
-    ));
-    results.add(result);
-    currentMission = null;
-
-    final updated = p.copyWith(intimacyLevel: newIntimacy);
-    profile = updated.copyWith(progress: _progress.calculate(updated, results));
-    notifyListeners();
-
-    // TODO: 실패 시 원인별 미션 수정, 성공 시 피드백 생성
-    await generateNextMission();
+    return _dateGuide;
   }
 }
 
-/// 위젯 트리 어디서든 AppScope.of(context)로 접근.
+/// 위젯 트리 어디서든 AppScope.of(context)로 AppStore를 꺼내기 위한 통로
 class AppScope extends InheritedNotifier<AppStore> {
   const AppScope({super.key, required AppStore store, required super.child})
       : super(notifier: store);
