@@ -1,13 +1,13 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <application
-        android:label="one_way_love"
+        android:label="DueDate"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
+        <!-- 앱 화면 (Flutter). launchMode singleTask: 앱 화면은 하나만, 공유 중간 화면(ShareActivity)이 부르면 켜져 있던 화면이 앞으로 옴 -->
         <activity
             android:name=".MainActivity"
             android:exported="true"
-            android:launchMode="singleTop"
-            android:taskAffinity=""
+            android:launchMode="singleTask"
             android:theme="@style/LaunchTheme"
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode"
             android:hardwareAccelerated="true"
@@ -23,6 +23,34 @@
             <intent-filter>
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>
+            </intent-filter>
+        </activity>
+        <!-- 카톡 '대화 내보내기 → 텍스트 메시지만 저장' 앱 목록에 DueDate 표시, 받으면 보이지 않고 바로 닫히는 중간 화면
+             카톡은 받는 화면을 항상 새로 만들라고 요청해서, 앱 화면(MainActivity)이 직접 받으면 Flutter가 하나 더 켜짐
+             (디버그 실행 중엔 그 Flutter가 일시정지된 채 검은 화면으로 멈춤, logcat으로 확인)
+             카톡은 대화를 이메일 형식 'message/rfc822; charset="UTF8"'로 넘김
+             뒤에 charset이 붙어서 'message/rfc822'로는 안 맞고 'message/*'로 받아야 함
+             text/plain: 파일 앱 등에서 txt 파일을 공유할 때
+             받은 내용은 ShareActivity.kt → ShareInbox.kt → MainActivity.kt → lib/analysis/chat/share_receiver.dart -->
+        <activity
+            android:name=".ShareActivity"
+            android:exported="true"
+            android:label="DueDate"
+            android:taskAffinity=""
+            android:excludeFromRecents="true"
+            android:noHistory="true"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar">
+            <intent-filter>
+                <action android:name="android.intent.action.SEND"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <data android:mimeType="message/*"/>
+                <data android:mimeType="text/plain"/>
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.SEND_MULTIPLE"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <data android:mimeType="message/*"/>
+                <data android:mimeType="text/plain"/>
             </intent-filter>
         </activity>
         <!-- Don't delete the meta-data below.

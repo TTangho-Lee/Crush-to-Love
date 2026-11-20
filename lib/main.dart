@@ -5,6 +5,7 @@ import 'package:sqflite_common_ffi_web/sqflite_ffi_web.dart'
     show databaseFactoryFfiWeb;
 
 import 'analysis/chat/chat_store.dart';
+import 'analysis/chat/share_receiver.dart';
 import 'analysis/date/date_store.dart';
 import 'app/app_theme.dart';
 import 'app/main_shell.dart';
@@ -45,6 +46,16 @@ class _DueDateAppState extends State<DueDateApp> {
   final _missionStore = MissionStore();
   final _chatStore = ChatStore();
   final _dateStore = DateStore();
+
+  @override
+  void initState() {
+    super.initState();
+    // 안드로이드 공유로 받은 카톡 대화 → 대화 탭(피그마 9번)에서 바로 분석
+    ShareReceiver.listen((text) {
+      _chatStore.receiveSharedText(text);
+      MainShell.tabIndex.value = 2;
+    });
+  }
 
   @override
   void dispose() {

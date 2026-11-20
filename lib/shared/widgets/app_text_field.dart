@@ -12,6 +12,7 @@ class AppTextField extends StatelessWidget {
     super.key,
     required this.hint,
     this.maxLines = 1,
+    this.fontSize,
     this.controller,
   });
 
@@ -19,6 +20,9 @@ class AppTextField extends StatelessWidget {
 
   /// 몇 줄 높이로 보일지
   final int maxLines;
+
+  /// 글자 크기, 비우면 기본 (긴 대화를 한눈에 보려면 작게)
+  final double? fontSize;
 
   /// 입력한 글자를 읽을 때 사용
   final TextEditingController? controller;
@@ -30,12 +34,18 @@ class AppTextField extends StatelessWidget {
       borderSide: const BorderSide(color: AppColors.border),
     );
 
+    final size = fontSize;
+
     return TextField(
       controller: controller,
       maxLines: maxLines,
+      style: size == null ? null : TextStyle(fontSize: size, height: 1.35),
       decoration: InputDecoration(
         hintText: hint,
-        hintStyle: const TextStyle(fontSize: 13, color: AppColors.warmGray),
+        hintStyle: TextStyle(
+          fontSize: size == null || size > 13 ? 13 : size,
+          color: AppColors.warmGray,
+        ),
         filled: true,
         fillColor: AppColors.warmWhite,
         contentPadding: const EdgeInsets.all(14),
