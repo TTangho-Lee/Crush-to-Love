@@ -1,28 +1,374 @@
 // 피그마 9번 화면 (우리 대화 돌아보기)
-// '대화 분석하기'에서 쓸 데이터 메서드: ChatStore.analyze(대화 텍스트, myName: 내 이름)
+// 세 단계로 나눠서 위에서부터 채우면 되게
+//   ① 대화 넣기: 'txt 파일 불러오기' 또는 직접 붙여넣기 (안드로이드는 카톡 공유로도 들어옴)
+//   ② 분석 기간: 지금부터 며칠 · 몇 시간 전까지, 바꾸면 불러온 대화도 다시 잘라 넣음
+//   ③ 대화 속 사람: 내 이름 · 짝사랑 상대 고르기 (대화에 나온 이름 중에서)
+//      기본값: 내 이름은 추측 (1:1 파일 첫 줄 → '나' → 둘이면 먼저 말한 사람), 상대는 둘이면 나머지 한 명
+//      단톡방은 상대를 꼭 골라야 함, 고른 사람과 나의 메시지만 분석
+// 입력칸 아래 한 줄로 지금 넣은 대화 상태 (메시지 수 · 사람 수, 형식 오류)
+// '대화 분석하기'를 눌러야 분석, 성공하면 12번, 실패하면 이유를 버튼 위에 표시
+// 몇 년치 파일도 멈추지 않게
+//   파일 · 공유는 최근 keepDays(31)일만 남기고 읽음 (chat_parser.dart)
+//   대화 읽기는 백그라운드(compute)에서 한 번만 하고 읽은 결과를 다시 씀
+//   직접 붙여넣은 대화도 입력이 멈추면 잠시 뒤 읽어서 상태 · 이름 목록을 채움
+import 'dart:async';
+import 'dart:convert';
+
+import 'package:file_picker/file_picker.dart';
+import 'package:flutter/foundation.dart';
 import 'package:material_ui/material_ui.dart';
 
+import '../../shared/app_colors.dart';
 import '../../shared/widgets/app_header.dart';
 import '../../shared/widgets/app_text_field.dart';
 import '../../shared/widgets/panel_card.dart';
 import '../../shared/widgets/primary_button.dart';
-import '../../shared/widgets/secondary_button.dart';
+import 'chat_analyzer.dart';
+import 'chat_store.dart';
 import 'conversation_result_screen.dart';
 
-class ConversationInputScreen extends StatelessWidget {
+/// 직접 붙여넣은 대화를 읽기 전 기다리는 시간 (입력 중엔 안 읽음)
+const _typingPause = Duration(milliseconds: 600);
+
+/// 입력칸 아래 상태 한 줄
+typedef _Status = ({IconData icon, String text, bool warn});
+
+/// txt 파일 → 최근 keepDays일만 읽은 대화 (compute로 백그라운드에서)
+ParsedChat _readFile(List<int> bytes) =>
+    ParsedChat.parse(dropOldLines(utf8.decode(bytes, allowMalformed: true)));
+
+/// 공유받은 글자 → 최근 keepDays일만 읽은 대화 (compute로 백그라운드에서)
+ParsedChat _readShared(String text) => ParsedChat.parse(dropOldLines(text));
+
+class ConversationInputScreen extends StatefulWidget {
   const ConversationInputScreen({super.key});
 
-  // 피그마 12번으로 (대화 탭 안에서 이동, 하단 탭 유지)
-  void _openResult(BuildContext context) {
+  @override
+  State<ConversationInputScreen> createState() =>
+      _ConversationInputScreenState();
+}
+
+class _ConversationInputScreenState extends State<ConversationInputScreen> {
+  final _chatController = TextEditingController();
+
+  /// 분석 기간: 지금부터 _days일 _hours시간 전까지
+  int _days = defaultRange.inDays;
+  int _hours = 0;
+  Duration get _range => Duration(days: _days, hours: _hours);
+
+  /// 파일 · 공유로 받아 읽어 둔 전체 대화 (기간을 바꾸면 여기서 다시 자름), 직접 고치면 null
+  ParsedChat? _source;
+
+  /// _source를 어디서 받았는지 ('파일에서 불러옴', '카톡에서 공유받음')
+  String _sourceLabel = '';
+
+  /// 마지막으로 입력칸에 넣은 글자 (직접 고쳤는지 확인용)
+  String? _filledText;
+
+  /// 직접 붙여넣거나 고친 대화를 읽은 결과, _typedText가 그 글자
+  ParsedChat? _typed;
+  String? _typedText;
+
+  /// 입력칸의 마지막 글자 (커서만 움직였을 때 무시하려고)
+  String _lastText = '';
+
+  /// 입력이 멈추면 _typingPause 뒤에 읽기
+  Timer? _typingTimer;
+
+  /// 입력칸 아래 상태, 대화가 없으면 null
+  _Status? _status;
+
+  /// 분석 기간 안 대화에 나온 이름 (메시지 많은 순), '내 이름' · '짝사랑 상대' 목록
+  List<String> _senders = const [];
+
+  /// 고른 내 이름, 아직 없으면 null
+  String? _myName;
+
+  /// 고른 짝사랑 상대, 아직 없으면 null
+  String? _partner;
+
+  /// 짝사랑 상대 목록 (내 이름으로 고른 사람 빼고)
+  List<String> get _others => [
+        for (final name in _senders)
+          if (name != _myName) name,
+      ];
+
+  /// 세 명 이상 = 단톡방
+  bool get _isGroup => _senders.length > 2;
+
+  /// 분석 실패 이유, 없으면 null
+  String? _error;
+
+  /// 공유받은 대화 처리를 이미 예약했으면 true (중복 방지)
+  bool _sharedScheduled = false;
+
+  /// 대화를 읽거나 분석하는 중이면 true (버튼 잠금)
+  bool _busy = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _chatController.addListener(_onChatChanged);
+  }
+
+  @override
+  void dispose() {
+    _typingTimer?.cancel();
+    _chatController.dispose();
+    super.dispose();
+  }
+
+  // ---------- 대화 읽기 ----------
+
+  /// 입력칸이 바뀌면 불러온 원본과 연결을 끊고 (기간을 바꿔도 덮어쓰지 않게), 잠시 뒤 다시 읽기
+  void _onChatChanged() {
+    final text = _chatController.text;
+    if (text == _lastText) return; // 커서만 움직임
+    _lastText = text;
+    if (text == _filledText) return; // 불러온 대화를 넣은 것
+    _source = null;
+    _typed = null;
+    _typedText = null;
+    _typingTimer?.cancel();
+    _typingTimer = Timer(_typingPause, () => _readTyped(text));
+  }
+
+  /// 직접 넣은 대화 읽기 → 상태 · 이름 목록 갱신
+  Future<void> _readTyped(String text) async {
+    final parsed = text.trim().isEmpty
+        ? null
+        : await compute<String, ParsedChat>(ParsedChat.parse, text);
+    if (!mounted || _chatController.text != text) return; // 그새 또 바뀜
+    _typed = parsed;
+    _typedText = text;
+    _show(parsed);
+  }
+
+  /// 파일 · 공유로 받은 대화를 백그라운드에서 읽어 두고(reading) 기간만큼 입력칸에 넣기
+  Future<void> _fillChat(Future<ParsedChat> reading, String sourceLabel) async {
+    _typingTimer?.cancel();
+    setState(() {
+      _busy = true;
+      _error = null;
+      _status = (icon: Icons.hourglass_empty, text: '대화를 읽는 중…', warn: false);
+    });
+    final ParsedChat parsed;
+    try {
+      parsed = await reading;
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _busy = false;
+        _status = null;
+        _error = '대화를 읽지 못했어요. 다시 시도해 주세요.';
+      });
+      return;
+    }
+    if (!mounted) return;
+    _source = parsed;
+    _sourceLabel = sourceLabel;
+    // 새 대화라 이름은 다시 추측
+    _myName = null;
+    _partner = null;
+    _busy = false;
+    _applyRange();
+  }
+
+  /// 읽어 둔 대화를 지금 기간으로 잘라 입력칸에 (없으면 아무것도 안 함)
+  void _applyRange() {
+    final source = _source;
+    if (source == null) return;
+    final trimmed = source.keepRecent(range: _range);
+    _filledText = trimmed;
+    _chatController.text = trimmed;
+    _show(source);
+  }
+
+  /// 읽은 대화로 상태 한 줄 · 이름 목록 갱신 (분석 기간 안 메시지 기준)
+  void _show(ParsedChat? chat) {
+    final from = DateTime.now().subtract(_range);
+    final senders = chat?.senders(from: from) ?? const <String>[];
+    final count = chat == null
+        ? 0
+        : chat.messages.where((m) => !m.time.isBefore(from)).length;
+    final period = rangeLabel(_range);
+    final origin = _source != null ? '$_sourceLabel · ' : '';
+
+    final _Status? status = chat == null
+        ? null
+        : chat.messages.isEmpty
+            ? (
+                icon: Icons.error_outline,
+                text: "카톡 내보내기 형식이 아니에요. '[이름] [오후 1:00] 내용' 형식인지 확인해 주세요.",
+                warn: true,
+              )
+            : count == 0
+                ? (
+                    icon: Icons.info_outline,
+                    text: '최근 $period 안에는 대화가 없어요. 분석 기간을 늘려 보세요.',
+                    warn: true,
+                  )
+                : (
+                    icon: Icons.check_circle_outline,
+                    text: '$origin최근 $period · 메시지 $count개 · ${senders.length}명',
+                    warn: false,
+                  );
+
+    setState(() {
+      _status = status;
+      _senders = senders;
+      _error = null;
+      // 고른 이름이 목록에 없으면 기본값으로
+      if (!senders.contains(_myName)) {
+        final guessed = chat?.guessMe();
+        _myName = senders.contains(guessed) ? guessed : null;
+      }
+      _fixPartner();
+    });
+  }
+
+  /// 상대가 비었거나 나와 같으면: 둘이면 나머지 한 명, 단톡방이면 비움
+  void _fixPartner() {
+    final others = _others;
+    if (others.contains(_partner)) return;
+    _partner = others.length == 1 ? others.first : null;
+  }
+
+  // ---------- 버튼 ----------
+
+  /// 'txt 파일 불러오기': 고른 파일 내용을 입력칸에
+  Future<void> _pickFile() async {
+    final List<int> bytes;
+    try {
+      final files = await FilePicker.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['txt'],
+      );
+      if (files.isEmpty) return; // 취소
+      bytes = await files.first.readAsBytes();
+    } catch (e) {
+      if (mounted) setState(() => _error = '파일을 열지 못했어요. 다시 골라 주세요.');
+      return;
+    }
+    if (!mounted) return;
+    await _fillChat(compute(_readFile, bytes), '파일에서 불러옴');
+  }
+
+  /// 안드로이드 공유로 받은 대화: 열려 있던 결과 화면을 닫고 입력칸에
+  void _fillShared() {
+    _sharedScheduled = false;
+    if (!mounted) return;
+    final chat = ChatScope.of(context).takePendingText();
+    if (chat == null) return;
+    Navigator.popUntil(context, (route) => route.isFirst);
+    _fillChat(compute(_readShared, chat), '카톡에서 공유받음');
+  }
+
+  void _setRange({int? days, int? hours}) {
+    setState(() {
+      _days = days ?? _days;
+      _hours = hours ?? _hours;
+    });
+    if (_source != null) {
+      _applyRange();
+    } else if (_typed != null) {
+      _show(_typed);
+    }
+  }
+
+  void _pickMyName(String? name) {
+    setState(() {
+      _myName = name;
+      _fixPartner();
+    });
+  }
+
+  /// '대화 분석하기'
+  Future<void> _analyze() async {
+    final chat = _chatController.text;
+    if (chat.trim().isEmpty) {
+      setState(() => _error = '대화를 붙여넣거나 txt 파일을 불러와 주세요.');
+      return;
+    }
+    if (_range == Duration.zero) {
+      setState(() => _error = '분석 기간을 1시간 이상으로 골라 주세요.');
+      return;
+    }
+    // 이름 목록이 있으면 둘 다 골라야 함 (없으면 분석기가 추측)
+    if (_senders.isNotEmpty && (_myName == null || _partner == null)) {
+      setState(() {
+        _error = _myName == null
+            ? '내 이름을 골라 주세요.'
+            : _others.isEmpty
+                ? '분석 기간 안에 상대 메시지가 없어요. 기간을 늘려 보세요.'
+                : '짝사랑 상대를 골라 주세요.';
+      });
+      return;
+    }
+    final store = ChatScope.of(context);
+    _typingTimer?.cancel();
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+
+    ParsedChat? parsed;
+    String? error;
+    try {
+      // 이미 읽어 둔 결과가 있으면 그대로, 없으면 백그라운드에서 읽기
+      final typed = _typedText == chat ? _typed : null;
+      final read = _source ??
+          typed ??
+          await compute<String, ParsedChat>(ParsedChat.parse, chat);
+      parsed = read;
+      if (_source == null) {
+        _typed = read;
+        _typedText = chat;
+      }
+      store.analyze(
+        read,
+        myName: _myName,
+        partnerName: _partner,
+        range: _range,
+      );
+    } on ChatAnalysisError catch (e) {
+      error = e.message;
+    } catch (_) {
+      error = '분석하다 문제가 생겼어요. 다시 시도해 주세요.';
+    }
+    if (!mounted) return;
+
+    if (error != null) {
+      // 이름 문제일 수 있으니 분석 기간 안 대화에 나온 이름으로 목록 갱신
+      if (parsed != null) _show(parsed);
+      setState(() {
+        _busy = false;
+        _error = error;
+      });
+      return;
+    }
+    setState(() => _busy = false);
+    // 피그마 12번으로 (대화 탭 안에서 이동, 하단 탭 유지)
+    FocusScope.of(context).unfocus();
     Navigator.push(
       context,
       MaterialPageRoute(builder: (_) => const ConversationResultScreen()),
     );
   }
 
+  // ---------- 화면 ----------
+
   @override
   Widget build(BuildContext context) {
     final text = Theme.of(context).textTheme;
+    final error = _error;
+    final status = _status;
+
+    // 공유받은 대화가 들어오면 화면을 다 그린 뒤 입력칸에
+    if (ChatScope.of(context).hasPendingText && !_sharedScheduled) {
+      _sharedScheduled = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) => _fillShared());
+    }
 
     return Scaffold(
       body: SafeArea(
@@ -33,40 +379,360 @@ class ConversationInputScreen extends StatelessWidget {
             const SizedBox(height: 24),
             Text('우리 대화 돌아보기', style: text.headlineSmall),
             const SizedBox(height: 8),
-            Text('카톡 대화를 붙여넣고 답장 패턴을 확인해요.', style: text.bodySmall),
-            const SizedBox(height: 24),
-            PanelCard(
+            Text('카톡 대화로 답장 패턴과 호감 신호를 확인해요.', style: text.bodySmall),
+            const SizedBox(height: 20),
+            _Step(
+              number: 1,
+              title: '대화 넣기',
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('대화 붙여넣기', style: text.titleSmall),
-                  const SizedBox(height: 4),
-                  Text('시간과 발신자가 포함된 카카오톡 내보내기 텍스트', style: text.bodySmall),
-                  const SizedBox(height: 12),
-                  const AppTextField(
-                    hint: '[나] [오후 1:00] 오늘 수업 어땠어?',
-                    maxLines: 5,
+                  _FileButton(onPressed: _busy ? null : _pickFile),
+                  const SizedBox(height: 10),
+                  Text('또는 아래에 직접 붙여넣기', style: text.bodySmall),
+                  const SizedBox(height: 6),
+                  // 긴 대화도 한눈에 보이게 작은 글자로 여러 줄
+                  AppTextField(
+                    hint: '[지민] [오후 1:00] 오늘 수업 어땠어?',
+                    maxLines: 10,
+                    fontSize: 11,
+                    controller: _chatController,
                   ),
-                  const SizedBox(height: 16),
-                  Text('내 이름 · 선택', style: text.titleSmall),
-                  const SizedBox(height: 8),
-                  const AppTextField(hint: "미입력 시 '나' 또는 첫 발신자"),
-                  const SizedBox(height: 8),
-                  Text('대화는 브라우저에서 분석하며 저장하지 않아요.', style: text.bodySmall),
+                  if (status != null) ...[
+                    const SizedBox(height: 8),
+                    _StatusLine(status),
+                  ],
                 ],
               ),
             ),
-            const SizedBox(height: 16),
-            PrimaryButton(
-              label: '대화 분석하기',
-              onPressed: () => _openResult(context),
+            const SizedBox(height: 12),
+            _Step(
+              number: 2,
+              title: '분석 기간',
+              child: Row(
+                children: [
+                  _Dropdown<int>(
+                    value: _days,
+                    items: [for (var i = 0; i <= 30; i++) (i, '$i일')],
+                    onChanged: (v) => _setRange(days: v),
+                  ),
+                  const SizedBox(width: 6),
+                  _Dropdown<int>(
+                    value: _hours,
+                    items: [for (var i = 0; i <= 23; i++) (i, '$i시간')],
+                    onChanged: (v) => _setRange(hours: v),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(child: Text('전부터 지금까지', style: text.bodySmall)),
+                ],
+              ),
             ),
             const SizedBox(height: 12),
-            SecondaryButton(
-              label: '예시 결과 보기',
-              onPressed: () => _openResult(context),
+            _Step(
+              number: 3,
+              title: '대화 속 사람',
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(
+                        child: _Labeled(
+                          label: '내 이름',
+                          child: _Dropdown<String?>(
+                            value: _myName,
+                            expanded: true,
+                            hint: _senders.isEmpty ? '대화를 넣어 주세요' : '골라 주세요',
+                            items: [for (final name in _senders) (name, name)],
+                            onChanged: _senders.isEmpty ? null : _pickMyName,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: _Labeled(
+                          label: '짝사랑 상대',
+                          child: _Dropdown<String?>(
+                            value: _partner,
+                            expanded: true,
+                            hint: _senders.isEmpty ? '대화를 넣어 주세요' : '골라 주세요',
+                            items: [for (final name in _others) (name, name)],
+                            onChanged: _others.isEmpty
+                                ? null
+                                : (name) => setState(() => _partner = name),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  if (_senders.isNotEmpty) ...[
+                    const SizedBox(height: 8),
+                    Text(
+                      _isGroup
+                          ? '단톡방이에요. 고른 상대와 나의 메시지만 분석해요.'
+                          : '이름이 다르면 직접 골라 주세요.',
+                      style: text.bodySmall,
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            if (error != null) ...[
+              const SizedBox(height: 12),
+              _ErrorBox(error),
+            ],
+            const SizedBox(height: 16),
+            PrimaryButton(
+              label: _busy ? '분석하는 중…' : '대화 분석하기',
+              onPressed: _busy ? null : _analyze,
+            ),
+            const SizedBox(height: 12),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Icon(Icons.lock_outline, size: 14, color: AppColors.warmGray),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    '대화는 이 기기에서만 분석하고 저장하지 않아요. 분석 숫자만 이 기기에 남아요.',
+                    style: text.bodySmall,
+                  ),
+                ),
+              ],
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+// ---------- 작은 위젯 ----------
+
+/// 번호가 붙은 단계 상자 ('① 대화 넣기')
+class _Step extends StatelessWidget {
+  const _Step({
+    required this.number,
+    required this.title,
+    required this.child,
+  });
+
+  final int number;
+  final String title;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final text = Theme.of(context).textTheme;
+
+    return PanelCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 22,
+                height: 22,
+                alignment: Alignment.center,
+                decoration: const BoxDecoration(
+                  color: AppColors.peach,
+                  shape: BoxShape.circle,
+                ),
+                child: Text('$number', style: text.titleSmall?.copyWith(fontSize: 12)),
+              ),
+              const SizedBox(width: 8),
+              Text(title, style: text.titleSmall),
+            ],
+          ),
+          const SizedBox(height: 12),
+          child,
+        ],
+      ),
+    );
+  }
+}
+
+/// 작은 이름 + 아래 입력 칸 ('내 이름' + 스피너)
+class _Labeled extends StatelessWidget {
+  const _Labeled({required this.label, required this.child});
+
+  final String label;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label, style: Theme.of(context).textTheme.labelSmall),
+        const SizedBox(height: 6),
+        child,
+      ],
+    );
+  }
+}
+
+/// 'txt 파일 불러오기' 버튼 (흰 바탕 테두리, 아이콘)
+class _FileButton extends StatelessWidget {
+  const _FileButton({required this.onPressed});
+
+  final VoidCallback? onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: double.infinity,
+      height: 44,
+      child: OutlinedButton.icon(
+        onPressed: onPressed,
+        icon: const Icon(Icons.upload_file, size: 18),
+        label: const Text('txt 파일 불러오기'),
+        style: OutlinedButton.styleFrom(
+          backgroundColor: AppColors.warmWhite,
+          foregroundColor: AppColors.charcoal,
+          disabledForegroundColor: AppColors.warmGray,
+          side: const BorderSide(color: AppColors.border),
+          textStyle: Theme.of(context).textTheme.titleSmall,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// 입력칸 아래 상태 한 줄 (아이콘 + 글자), 문제가 있으면 빨간 글자
+class _StatusLine extends StatelessWidget {
+  const _StatusLine(this.status);
+
+  final _Status status;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = status.warn
+        ? Theme.of(context).colorScheme.error
+        : AppColors.warmGray;
+
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(status.icon, size: 15, color: color),
+        const SizedBox(width: 6),
+        Expanded(
+          child: Text(
+            status.text,
+            style: Theme.of(context).textTheme.labelSmall?.copyWith(color: color),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// 분석 실패 이유 상자
+class _ErrorBox extends StatelessWidget {
+  const _ErrorBox(this.message);
+
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = Theme.of(context).colorScheme.error;
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: AppColors.roseSoft,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(Icons.error_outline, size: 16, color: color),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              message,
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(color: color),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// 작은 고르기 칸 ('7일 ▾', '내 이름 ▾')
+class _Dropdown<T> extends StatelessWidget {
+  const _Dropdown({
+    required this.value,
+    required this.items,
+    required this.onChanged,
+    this.hint,
+    this.expanded = false,
+  });
+
+  final T value;
+
+  /// (값, 보여줄 글자)
+  final List<(T, String)> items;
+
+  /// null이면 흐려지고 못 고름
+  final ValueChanged<T>? onChanged;
+
+  /// 고른 값이 없을 때 보여줄 글자
+  final String? hint;
+
+  /// 가로로 꽉 채우기 (기본은 글자 길이만큼)
+  final bool expanded;
+
+  @override
+  Widget build(BuildContext context) {
+    final style = Theme.of(context)
+        .textTheme
+        .bodySmall
+        ?.copyWith(color: AppColors.charcoal);
+    final hint = this.hint;
+    final onChanged = this.onChanged;
+
+    return Container(
+      height: 36,
+      padding: const EdgeInsets.symmetric(horizontal: 10),
+      alignment: Alignment.centerLeft,
+      decoration: BoxDecoration(
+        color: AppColors.warmWhite,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: DropdownButtonHideUnderline(
+        child: DropdownButton<T>(
+          value: value,
+          isDense: true,
+          isExpanded: expanded,
+          iconSize: 18,
+          borderRadius: BorderRadius.circular(10),
+          dropdownColor: AppColors.warmWhite,
+          menuMaxHeight: 300,
+          style: style,
+          hint: hint == null
+              ? null
+              : Text(
+                  hint,
+                  style: style?.copyWith(color: AppColors.warmGray),
+                  overflow: TextOverflow.ellipsis,
+                ),
+          items: [
+            for (final (v, label) in items)
+              DropdownMenuItem<T>(
+                value: v,
+                child: Text(label, overflow: TextOverflow.ellipsis),
+              ),
+          ],
+          onChanged: onChanged == null ? null : (v) => onChanged(v as T),
         ),
       ),
     );
