@@ -1,6 +1,7 @@
 // 피그마 1번 화면 (시작)
 import 'package:material_ui/material_ui.dart';
 
+import '../app/main_shell.dart';
 import '../shared/widgets/app_header.dart';
 import '../shared/widgets/primary_button.dart';
 import '../shared/widgets/secondary_button.dart';
@@ -43,7 +44,16 @@ class StartScreen extends StatelessWidget {
             const SizedBox(height: 12),
             SecondaryButton(
               label: 'D-20 예시 보기',
-              onPressed: () {}, // 이동할 곳 미정 (기획 확인)
+              // 예시 데이터 홈(피그마 7번)으로, 맨 위 '나가기'로 이 화면 복귀
+              onPressed: () {
+                MainShell.tabIndex.value = 0;
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => const MainShell(example: true),
+                  ),
+                );
+              },
             ),
           ],
         ),
