@@ -6,12 +6,18 @@ import '../../shared/models.dart';
 import '../../shared/widgets/option_card.dart';
 
 class IntimacyStep extends StatelessWidget {
-  const IntimacyStep({super.key});
+  const IntimacyStep({
+    super.key,
+    required this.selected,
+    required this.onChanged,
+  });
+
+  final Intimacy selected;
+  final ValueChanged<Intimacy> onChanged;
 
   @override
   Widget build(BuildContext context) {
     final text = Theme.of(context).textTheme;
-    const selected = Intimacy.smallTalk; // 피그마 예시
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -28,6 +34,7 @@ class IntimacyStep extends StatelessWidget {
                 title: level.label,
                 description: level.description,
                 selected: level == selected,
+                onTap: () => onChanged(level),
               ),
           ],
         ),

@@ -18,6 +18,27 @@ enum Intimacy {
   final String description;
 }
 
+/// 용기 배터리 단계 (피그마 5번), 기획서의 20 · 50 · 80 · 100% 기준
+enum CourageLevel {
+  low('저전력 · 가벼운 신호', '눈이 마주치면 인사하거나 스토리에 좋아요를 눌러봐요.'),
+  standard('표준 · 가벼운 대화', '먼저 톡을 보내거나 공통 관심사를 가볍게 물어봐요.'),
+  boost('고속충전 · 단둘이 약속', '단둘이 식사나 카페에 가자고 가볍게 제안해봐요.'),
+  full('풀충전 · 마음 표현', '호감을 표현하거나 용기 내어 고백해봐요.');
+
+  const CourageLevel(this.label, this.description);
+
+  final String label;
+  final String description;
+
+  /// 0~34% 저전력, 35~64% 표준, 65~89% 고속충전, 90~100% 풀충전
+  static CourageLevel of(int percent) => switch (percent) {
+        < 35 => low,
+        < 65 => standard,
+        < 90 => boost,
+        _ => full,
+      };
+}
+
 /// 목표 (피그마 6번, 11번)
 enum Goal {
   friends('친해지기', '편하게 인사하고 가끔 이야기를 나눠요.'),

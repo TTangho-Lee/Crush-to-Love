@@ -2,16 +2,25 @@
 import 'package:material_ui/material_ui.dart';
 
 import '../../shared/app_colors.dart';
+import '../../shared/models.dart';
 
-/// D-Day 날짜 칸 (피그마 2번), 누르면 달력이 뜰 자리
-/// date가 없으면 'YYYY. MM. DD.'
+/// D-Day 날짜 칸 (피그마 2번), 누르면 달력
+/// date가 없으면 'YYYY. MM. DD.' + '날짜를 선택해 주세요', 있으면 날짜 + 'D-20'
 ///
-///     const DateField()
+///     DateField(date: dDay, onTap: () {})
 class DateField extends StatelessWidget {
   const DateField({super.key, this.date, this.onTap});
 
   final DateTime? date;
   final VoidCallback? onTap;
+
+  /// 오늘부터 남은 날 수 (시간 무시, 날짜만 비교)
+  static int _daysFromToday(DateTime d) {
+    final now = DateTime.now();
+    return DateTime.utc(d.year, d.month, d.day)
+        .difference(DateTime.utc(now.year, now.month, now.day))
+        .inDays;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -21,6 +30,7 @@ class DateField extends StatelessWidget {
         ? 'YYYY. MM. DD.'
         : '${d.year}. ${d.month.toString().padLeft(2, '0')}. '
             '${d.day.toString().padLeft(2, '0')}.';
+    final subLabel = d == null ? '날짜를 선택해 주세요' : dDayLabel(_daysFromToday(d));
 
     return GestureDetector(
       onTap: onTap,
@@ -47,7 +57,7 @@ class DateField extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 6),
-            Text('날짜를 선택해 주세요', style: text.bodySmall),
+            Text(subLabel, style: text.bodySmall),
           ],
         ),
       ),

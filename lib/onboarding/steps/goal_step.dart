@@ -6,12 +6,18 @@ import '../../shared/models.dart';
 import '../../shared/widgets/option_card.dart';
 
 class GoalStep extends StatelessWidget {
-  const GoalStep({super.key});
+  const GoalStep({
+    super.key,
+    required this.selected,
+    required this.onChanged,
+  });
+
+  final Goal selected;
+  final ValueChanged<Goal> onChanged;
 
   @override
   Widget build(BuildContext context) {
     final text = Theme.of(context).textTheme;
-    const selected = Goal.friends; // 피그마 예시
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -28,6 +34,7 @@ class GoalStep extends StatelessWidget {
                 title: goal.label,
                 description: goal.description,
                 selected: goal == selected,
+                onTap: () => onChanged(goal),
               ),
           ],
         ),
