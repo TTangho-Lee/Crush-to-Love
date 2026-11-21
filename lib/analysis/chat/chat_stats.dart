@@ -39,7 +39,7 @@ class ChatStats {
   /// 호감 신호 점수의 '웃음 · 긍정 표현' 근거와 같은 값
   final int warmPercent;
 
-  /// 관찰된 변화 (예: '분석 기간 앞쪽보다 상대 답장이 5분 빨라졌어요.'), 비교할 만큼 대화가 없으면 null
+  /// 분석 기간 앞쪽 → 뒤쪽 상대 변화 (예: '보통 답장 -5분 · 질문 +12%p'), 비교할 만큼 대화가 없으면 null
   final String? change;
 
   /// 다음 대화 힌트 (insight가 있으면 insight.hint와 같음)
@@ -68,7 +68,7 @@ const fakeChatStats = ChatStats(
   avgLength: 17,
   messagesPerDay: 6,
   warmPercent: 67,
-  change: '분석 기간 앞쪽보다 상대 답장이 18분 빨라졌고, 질문이 35%p 늘었어요.',
+  change: '보통 답장 -18분 · 질문 +35%p',
   hint: _fakeHint,
   period: '예시 · 최근 7일 대화',
   insight: Insight(
@@ -89,9 +89,11 @@ const fakeChatStats = ChatStats(
     strategy: '약속 제안해보기',
     hint: _fakeHint,
     lines: [
+      '저번에 말한 맛집 같이 가볼래? ㅎㅎ',
       '이번 주에 시간 되면 같이 밥 먹을래?',
-      '저번에 얘기한 거 같이 가볼래? ㅎㅎ',
+      '요즘 영화 볼 거 있어? 같이 보러 가자 ㅎㅎ',
     ],
+    topics: ['맛집·음식', '영화·드라마'],
   ),
   isExample: true,
 );

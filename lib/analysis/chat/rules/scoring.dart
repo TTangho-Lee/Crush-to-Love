@@ -2,7 +2,8 @@
 //   baseScore(40점)에서 시작해서 상대 쪽 행동마다 더하고 빼는 방식 (나의 행동은 점수에 안 넣음)
 //   보통 친구 사이 대화가 '보통' 구간에 오도록 맞춤, 여러 신호가 겹쳐야 '높음'
 //   근거(Signal)를 같이 남겨서 화면에 '왜 이 점수인지' 보여줌
-//   기준값 · 점수는 아래 표에서 고치면 됨 (실제 대화로 맞춰가며 조정할 것)
+//   기준값 · 점수는 아래에서 고치면 됨 (실제 대화로 맞춰가며 조정할 것)
+//   근거 문장은 화면에 그대로 나가니까 상대 입장에서 자연스럽게
 import 'features.dart';
 import 'lexicon.dart';
 
@@ -129,6 +130,18 @@ InterestScore scoreInterest(ConversationFeatures f) {
       add(-6, '상대 답장이 내 메시지보다 많이 짧아요');
     }
   }
+  if (them.textCount >= 5 && them.longRate >= 0.25) {
+    add(4, '길게 정성 들여 답해요');
+  }
+  if (them.textCount >= 5 && them.rate(MessageTag.question) >= 0.3) {
+    add(4, '나에게 질문을 자주 해요');
+  }
+  if (them.count >= 6 && f.theirBurstRate >= 0.3) {
+    add(3, '한 번에 여러 개씩 신나게 보내요');
+  }
+  if (f.sessionCount >= 3 && f.theirEndRate <= 0.2) {
+    add(-3, '내 메시지에서 대화가 끊길 때가 많아요');
+  }
 
   // 표현
   if (them.warmRate >= 0.4) {
@@ -147,6 +160,44 @@ InterestScore scoreInterest(ConversationFeatures f) {
   if (them.rate(MessageTag.compliment) > 0) {
     add(4, '칭찬하는 말을 해요');
   }
+  if (them.rate(MessageTag.affection) > 0) {
+    add(8, '보고 싶다 · 생각났다는 말을 해요');
+  }
+  if (them.rate(MessageTag.interest) > 0) {
+    add(5, '내 이야기를 더 궁금해해요');
+  }
+  if (them.rate(MessageTag.share) >= 0.15) {
+    add(5, '자기 일상을 먼저 들려줘요');
+  } else if (them.rate(MessageTag.share) > 0) {
+    add(2, '가끔 자기 일상을 들려줘요');
+  }
+  if (them.rate(MessageTag.surprise) >= 0.15) {
+    add(3, '내 이야기에 리액션이 커요');
+  }
+  if (them.rate(MessageTag.empathy) >= 0.1) {
+    add(3, '맞장구를 잘 쳐줘요');
+  }
+  if (them.rate(MessageTag.recommend) > 0) {
+    add(3, '좋아하는 걸 나에게 공유해요');
+  }
+  if (them.rate(MessageTag.tease) >= 0.05) {
+    add(4, '장난을 칠 만큼 편해 보여요');
+  }
+  if (them.rate(MessageTag.aegyo) >= 0.1) {
+    add(4, '애교 섞인 말투를 써요');
+  }
+  if (them.rate(MessageTag.greeting) > 0 && f.theirStartRate > 0) {
+    add(3, '먼저 인사를 건네요');
+  }
+  if (them.rate(MessageTag.goodbye) > 0) {
+    add(2, '대화를 다정하게 마무리해요');
+  }
+  if (them.rate(MessageTag.lateReplySorry) > 0) {
+    add(4, '답이 늦으면 미안해해요');
+  }
+  if (them.rate(MessageTag.sad) >= 0.1 && them.rate(MessageTag.share) > 0) {
+    add(3, '속상한 일도 털어놓아요');
+  }
   if (them.rate(MessageTag.shortReply) >= 0.4) {
     add(-8, '짧은 대답이 많아요');
   } else if (them.rate(MessageTag.shortReply) >= 0.25) {
@@ -157,6 +208,14 @@ InterestScore scoreInterest(ConversationFeatures f) {
   }
   if (them.rate(MessageTag.busy) >= 0.15) {
     add(-4, '바쁘다는 말이 자주 보여요');
+  }
+  if (them.rate(MessageTag.tired) >= 0.2) {
+    add(-2, '피곤하다는 말이 자주 보여요');
+  }
+  if (them.textCount >= 5 &&
+      them.rate(MessageTag.honorific) >= 0.6 &&
+      f.me.rate(MessageTag.honorific) < 0.3) {
+    add(-4, '상대만 존댓말을 써서 거리감이 있어요');
   }
 
   // 약속
@@ -173,6 +232,15 @@ InterestScore scoreInterest(ConversationFeatures f) {
   }
   if (them.rate(MessageTag.future) > 0) {
     add(5, '다음을 기약하는 말을 해요');
+  }
+  if (them.rate(MessageTag.plan) > 0) {
+    add(6, '약속 시간 · 장소를 구체적으로 이야기해요');
+  }
+  if (them.rate(MessageTag.metUp) > 0) {
+    add(4, '만난 뒤 즐거웠다는 말을 해요');
+  }
+  if (them.rate(MessageTag.vague) >= 0.1 && (accept ?? 1) < 0.5) {
+    add(-4, '제안에 애매하게 답할 때가 있어요');
   }
 
   // 시간대
@@ -198,6 +266,9 @@ InterestScore scoreInterest(ConversationFeatures f) {
       add(3, '최근 상대 메시지가 늘었어요');
     } else if (trend.theirShareChange <= -0.1) {
       add(-3, '최근 상대 메시지가 줄었어요');
+    }
+    if (trend.theirQuestionChange >= 0.1) {
+      add(2, '최근 나에게 묻는 말이 늘었어요');
     }
   }
 

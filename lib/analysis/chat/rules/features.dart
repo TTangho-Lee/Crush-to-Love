@@ -8,6 +8,7 @@ import '../chat_parser.dart';
 import 'lexicon.dart';
 import 'normalizer.dart';
 import 'tagger.dart';
+import 'topics.dart';
 
 /// 이 시간 넘게 말이 없으면 새 대화 묶음
 const sessionGap = Duration(hours: 3);
@@ -17,6 +18,9 @@ const maxReplyGap = Duration(hours: 24);
 
 /// 앞 절반 · 뒤 절반 비교에 필요한 최소 메시지 수 (한쪽당)
 const minTrendMessages = 5;
+
+/// 이 글자 수 이상이면 길게 쓴 메시지 (정성 들인 답)
+const longMessageLength = 30;
 
 /// 표시가 붙은 메시지
 class TaggedMessage {
@@ -45,6 +49,7 @@ class SideFeatures {
     required this.replyMedianMinutes,
     required this.tagRates,
     required this.warmRate,
+    required this.longRate,
   });
 
   /// 메시지 수
@@ -64,6 +69,9 @@ class SideFeatures {
 
   /// 따뜻한 표현(웃음 · 긍정 · 고마움 · 칭찬 · 챙김)이 하나라도 있는 메시지 비율 0~1
   final double warmRate;
+
+  /// 길게 쓴 메시지(longMessageLength자 이상) 비율 0~1 (글자 있는 메시지 기준)
+  final double longRate;
 
   double rate(MessageTag tag) => tagRates[tag] ?? 0;
 }
@@ -115,6 +123,9 @@ class ConversationFeatures {
     required this.lateNightRate,
     required this.theirBurstRate,
     required this.trend,
+    required this.topics,
+    required this.lastMessageAt,
+    required this.recentMetUp,
   });
 
   final SideFeatures me;
@@ -153,6 +164,15 @@ class ConversationFeatures {
   /// 앞 절반 → 뒤 절반 변화, 메시지가 적으면 null
   final Trend? trend;
 
+  /// 두 사람 대화에 자주 나온 주제 (많은 순, 최대 3개), rules/topics.dart
+  final List<Topic> topics;
+
+  /// 마지막 메시지 시각 (오랜만에 연락하는 상황인지 볼 때)
+  final DateTime lastMessageAt;
+
+  /// 마지막 대화 묶음에 '만난 뒤 인사'(잘 들어갔어? · 오늘 즐거웠어)가 있음 (누가 보냈든)
+  final bool recentMetUp;
+
   /// 설명 · 디버그용 (숫자는 소수 둘째 자리까지)
   Map<String, Object?> toMap() => {
         'myCount': me.count,
@@ -161,6 +181,7 @@ class ConversationFeatures {
         'myAvgLength': _round(me.avgLength),
         'theirWarmRate': _round(them.warmRate),
         'theirAvgLength': _round(them.avgLength),
+        'theirLongRate': _round(them.longRate),
         'lengthBalance': _round(lengthBalance),
         'myReplyMedianMin': _roundOrNull(me.replyMedianMinutes),
         'theirReplyMedianMin': _roundOrNull(them.replyMedianMinutes),
@@ -180,6 +201,9 @@ class ConversationFeatures {
           for (final e in me.tagRates.entries)
             if (e.value > 0) e.key.name: _round(e.value),
         },
+        'topics': [for (final t in topics) t.name],
+        'lastMessageAt': lastMessageAt.toIso8601String(),
+        'recentMetUp': recentMetUp,
         if (trend != null)
           'trend': {
             'theirReplyChangeMin': _roundOrNull(trend!.theirReplyChange),
@@ -270,6 +294,12 @@ ConversationFeatures computeFeatures(List<ChatMessage> messages, String me) {
       theirTurns.length,
     ),
     trend: _trend(tagged),
+    topics: detectTopics([
+      for (final t in tagged)
+        if (t.hasText) normalize(t.message.text).compact,
+    ]),
+    lastMessageAt: tagged.last.time,
+    recentMetUp: sessions.last.any((t) => t.has(MessageTag.metUp)),
   );
 }
 
@@ -337,6 +367,12 @@ SideFeatures _side(List<TaggedMessage> list, List<double> replies) {
     },
     warmRate: _ratio(
       texts.where((t) => t.tags.any(warmTags.contains)).length,
+      texts.length,
+    ),
+    longRate: _ratio(
+      texts
+          .where((t) => textLength(t.message.text) >= longMessageLength)
+          .length,
       texts.length,
     ),
   );

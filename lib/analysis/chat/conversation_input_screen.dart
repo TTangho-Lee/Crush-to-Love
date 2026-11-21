@@ -6,6 +6,7 @@
 //      기본값: 내 이름은 추측 (1:1 파일 첫 줄 → '나' → 둘이면 먼저 말한 사람), 상대는 둘이면 나머지 한 명
 //      단톡방은 상대를 꼭 골라야 함, 고른 사람과 나의 메시지만 분석
 // 입력칸 아래 한 줄로 지금 넣은 대화 상태 (메시지 수 · 사람 수, 형식 오류)
+// 기호로 알 수 있는 건 글자로 따로 안 씀 (▾ 고르기, ✓ 읽음, ~ 기간)
 // '대화 분석하기'를 눌러야 분석, 성공하면 12번, 실패하면 이유를 버튼 위에 표시
 // 몇 년치 파일도 멈추지 않게
 //   파일 · 공유는 최근 keepDays(31)일만 남기고 읽음 (chat_parser.dart)
@@ -58,9 +59,6 @@ class _ConversationInputScreenState extends State<ConversationInputScreen> {
 
   /// 파일 · 공유로 받아 읽어 둔 전체 대화 (기간을 바꾸면 여기서 다시 자름), 직접 고치면 null
   ParsedChat? _source;
-
-  /// _source를 어디서 받았는지 ('파일에서 불러옴', '카톡에서 공유받음')
-  String _sourceLabel = '';
 
   /// 마지막으로 입력칸에 넣은 글자 (직접 고쳤는지 확인용)
   String? _filledText;
@@ -145,12 +143,12 @@ class _ConversationInputScreenState extends State<ConversationInputScreen> {
   }
 
   /// 파일 · 공유로 받은 대화를 백그라운드에서 읽어 두고(reading) 기간만큼 입력칸에 넣기
-  Future<void> _fillChat(Future<ParsedChat> reading, String sourceLabel) async {
+  Future<void> _fillChat(Future<ParsedChat> reading) async {
     _typingTimer?.cancel();
     setState(() {
       _busy = true;
       _error = null;
-      _status = (icon: Icons.hourglass_empty, text: '대화를 읽는 중…', warn: false);
+      _status = (icon: Icons.hourglass_empty, text: '읽는 중…', warn: false);
     });
     final ParsedChat parsed;
     try {
@@ -166,7 +164,6 @@ class _ConversationInputScreenState extends State<ConversationInputScreen> {
     }
     if (!mounted) return;
     _source = parsed;
-    _sourceLabel = sourceLabel;
     // 새 대화라 이름은 다시 추측
     _myName = null;
     _partner = null;
@@ -192,7 +189,6 @@ class _ConversationInputScreenState extends State<ConversationInputScreen> {
         ? 0
         : chat.messages.where((m) => !m.time.isBefore(from)).length;
     final period = rangeLabel(_range);
-    final origin = _source != null ? '$_sourceLabel · ' : '';
 
     final _Status? status = chat == null
         ? null
@@ -210,7 +206,7 @@ class _ConversationInputScreenState extends State<ConversationInputScreen> {
                   )
                 : (
                     icon: Icons.check_circle_outline,
-                    text: '$origin최근 $period · 메시지 $count개 · ${senders.length}명',
+                    text: '최근 $period · 메시지 $count개 · ${senders.length}명',
                     warn: false,
                   );
 
@@ -251,7 +247,7 @@ class _ConversationInputScreenState extends State<ConversationInputScreen> {
       return;
     }
     if (!mounted) return;
-    await _fillChat(compute(_readFile, bytes), '파일에서 불러옴');
+    await _fillChat(compute(_readFile, bytes));
   }
 
   /// 안드로이드 공유로 받은 대화: 열려 있던 결과 화면을 닫고 입력칸에
@@ -261,7 +257,7 @@ class _ConversationInputScreenState extends State<ConversationInputScreen> {
     final chat = ChatScope.of(context).takePendingText();
     if (chat == null) return;
     Navigator.popUntil(context, (route) => route.isFirst);
-    _fillChat(compute(_readShared, chat), '카톡에서 공유받음');
+    _fillChat(compute(_readShared, chat));
   }
 
   void _setRange({int? days, int? hours}) {
@@ -389,7 +385,7 @@ class _ConversationInputScreenState extends State<ConversationInputScreen> {
                 children: [
                   _FileButton(onPressed: _busy ? null : _pickFile),
                   const SizedBox(height: 10),
-                  Text('또는 아래에 직접 붙여넣기', style: text.bodySmall),
+                  Text('또는 붙여넣기', style: text.bodySmall),
                   const SizedBox(height: 6),
                   // 긴 대화도 한눈에 보이게 작은 글자로 여러 줄
                   AppTextField(
@@ -423,7 +419,7 @@ class _ConversationInputScreenState extends State<ConversationInputScreen> {
                     onChanged: (v) => _setRange(hours: v),
                   ),
                   const SizedBox(width: 8),
-                  Expanded(child: Text('전부터 지금까지', style: text.bodySmall)),
+                  Expanded(child: Text('전 ~ 지금', style: text.bodySmall)),
                 ],
               ),
             ),
@@ -443,7 +439,7 @@ class _ConversationInputScreenState extends State<ConversationInputScreen> {
                           child: _Dropdown<String?>(
                             value: _myName,
                             expanded: true,
-                            hint: _senders.isEmpty ? '대화를 넣어 주세요' : '골라 주세요',
+                            hint: _senders.isEmpty ? '-' : '선택',
                             items: [for (final name in _senders) (name, name)],
                             onChanged: _senders.isEmpty ? null : _pickMyName,
                           ),
@@ -456,7 +452,7 @@ class _ConversationInputScreenState extends State<ConversationInputScreen> {
                           child: _Dropdown<String?>(
                             value: _partner,
                             expanded: true,
-                            hint: _senders.isEmpty ? '대화를 넣어 주세요' : '골라 주세요',
+                            hint: _senders.isEmpty ? '-' : '선택',
                             items: [for (final name in _others) (name, name)],
                             onChanged: _others.isEmpty
                                 ? null
@@ -466,13 +462,23 @@ class _ConversationInputScreenState extends State<ConversationInputScreen> {
                       ),
                     ],
                   ),
-                  if (_senders.isNotEmpty) ...[
+                  if (_isGroup) ...[
                     const SizedBox(height: 8),
-                    Text(
-                      _isGroup
-                          ? '단톡방이에요. 고른 상대와 나의 메시지만 분석해요.'
-                          : '이름이 다르면 직접 골라 주세요.',
-                      style: text.bodySmall,
+                    Row(
+                      children: [
+                        const Icon(
+                          Icons.groups_outlined,
+                          size: 15,
+                          color: AppColors.warmGray,
+                        ),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: Text(
+                            '단톡방 · 고른 상대와 내 메시지만 분석해요',
+                            style: text.bodySmall,
+                          ),
+                        ),
+                      ],
                     ),
                   ],
                 ],
@@ -495,7 +501,7 @@ class _ConversationInputScreenState extends State<ConversationInputScreen> {
                 const SizedBox(width: 6),
                 Expanded(
                   child: Text(
-                    '대화는 이 기기에서만 분석하고 저장하지 않아요. 분석 숫자만 이 기기에 남아요.',
+                    '대화는 이 기기에서만 분석하고, 내용은 저장하지 않아요.',
                     style: text.bodySmall,
                   ),
                 ),

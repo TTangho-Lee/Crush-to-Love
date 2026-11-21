@@ -96,19 +96,18 @@ class ChatComparison {
   List<String> get lines {
     final p = previous;
     final c = current;
-    final out = <String>['지난 분석: ${_md(p.lastMessageAt)}까지의 대화'];
+    final out = <String>['지난 분석 · ${_md(p.lastMessageAt)}까지'];
 
     final pr = p.replyMinutes;
     final cr = c.replyMinutes;
     if (pr != null && cr != null && (pr - cr).abs() >= 1) {
-      out.add('보통 답장 ${formatMinutes(pr.round())} → ${formatMinutes(cr.round())} '
-          '(${cr < pr ? '빨라졌어요' : '느려졌어요'})');
+      out.add('보통 답장 ${formatMinutes(pr.round())} → ${formatMinutes(cr.round())}');
     }
     if ((c.startRate - p.startRate).abs() >= 0.1) {
       out.add('상대가 먼저 말 걸기 ${_percent(p.startRate)} → ${_percent(c.startRate)}');
     }
     if ((c.warmRate - p.warmRate).abs() >= 0.1) {
-      out.add('따뜻한 표현 ${_percent(p.warmRate)} → ${_percent(c.warmRate)}');
+      out.add('긍정 표현 ${_percent(p.warmRate)} → ${_percent(c.warmRate)}');
     }
     if (recentScores.length >= 3) {
       out.add('최근 점수 ${recentScores.join(' → ')}');

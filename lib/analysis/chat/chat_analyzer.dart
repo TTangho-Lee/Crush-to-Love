@@ -101,7 +101,10 @@ ChatStats analyzeParsed(
 
   // 규칙 ③ 주고받기 지표 → ④ 점수 · ⑤ 추론 · ⑥ 멘트
   final features = computeFeatures(recent, me);
-  final insight = infer(features);
+  // 첫 대화인지는 분석 기간 말고 읽어 온 대화 전체로 봄
+  final total =
+      messages.where((m) => m.sender == me || m.sender == partner).length;
+  final insight = infer(features, now: at, totalMessages: total);
   final them = features.them;
   final reply = them.replyMedianMinutes?.round();
 
@@ -160,24 +163,24 @@ String _summary(int? reply) {
 }
 
 /// 관찰된 변화: 분석 기간 앞 절반 → 뒤 절반 (features.trend, 호감 신호 '최근 …' 근거와 같은 값)
-/// 답장 5분 이상, 질문 · 따뜻한 표현 비율 10%p 이상 차이 날 때만 문장으로
+/// 답장 5분 이상, 질문 · 긍정 표현 비율 10%p 이상 차이 날 때만 ('보통 답장 +31분 · 질문 -42%p')
 String? _describeChange(Trend? trend) {
   if (trend == null) return null;
   final parts = <String>[];
+  String sign(int v) => v > 0 ? '+' : '-';
 
   final reply = trend.theirReplyChange?.round();
   if (reply != null && reply.abs() >= 5) {
-    parts.add('답장이 ${formatMinutes(reply.abs())} ${reply < 0 ? '빨라졌' : '느려졌'}');
+    parts.add('보통 답장 ${sign(reply)}${formatMinutes(reply.abs())}');
   }
   final question = (trend.theirQuestionChange * 100).round();
   if (question.abs() >= 10) {
-    parts.add('질문이 ${question.abs()}%p ${question > 0 ? '늘었' : '줄었'}');
+    parts.add('질문 ${sign(question)}${question.abs()}%p');
   }
   final warmth = (trend.theirWarmthChange * 100).round();
   if (warmth.abs() >= 10) {
-    parts.add('따뜻한 표현이 ${warmth.abs()}%p ${warmth > 0 ? '늘었' : '줄었'}');
+    parts.add('긍정 표현 ${sign(warmth)}${warmth.abs()}%p');
   }
 
-  if (parts.isEmpty) return null;
-  return '분석 기간 앞쪽보다 상대 ${parts.join('고, ')}어요.';
+  return parts.isEmpty ? null : parts.join(' · ');
 }
