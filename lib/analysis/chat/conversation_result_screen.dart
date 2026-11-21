@@ -2,16 +2,17 @@
 // 데이터: ChatStore의 stats, comparison
 // 위에서부터 결론 → 근거 → 할 일 → 자세한 숫자 순서
 //   호감 신호: 점수 + 막대 + 점수를 올리고 내린 근거 (rules/scoring.dart)
-//   다음 대화: 추천 방향 + 예시 멘트 (누르면 복사)
+//   다음 대화: 추천 방향 + 자주 나온 이야기 + 예시 멘트 3개 (누르면 복사, 복사 아이콘으로만 표시)
 //   지금 사이: 대화로 본 친밀도 + 홈에서 관계 업데이트
-//   대화 숫자: 4칸, 누르면 아래에 설명 (rules/features.dart 값)
+//   대화 숫자: 4칸, 누르면 아래에 설명 (ⓘ 아이콘으로만 표시, rules/features.dart 값)
 //   달라진 점: 분석 기간 안 변화 + 지난 분석과 비교 (history 폴더)
-import 'package:flutter/services.dart';
+// 기호로 알 수 있는 건 글자로 따로 안 씀 (복사 · 설명 · 증감은 아이콘 · +/- · →)
 import 'package:material_ui/material_ui.dart';
 
 import '../../app/main_shell.dart';
 import '../../shared/app_colors.dart';
 import '../../shared/widgets/app_header.dart';
+import '../../shared/widgets/copy_bubble.dart';
 import '../../shared/widgets/progress_bar.dart';
 import '../../shared/widgets/secondary_button.dart';
 import 'chat_analyzer.dart';
@@ -271,72 +272,24 @@ class _NextTalkCard extends StatelessWidget {
           Text(insight.strategy, style: text.titleMedium),
           const SizedBox(height: 6),
           Text(insight.hint, style: text.bodySmall),
+          // 예시 멘트가 이 주제에 맞춰져 있음 (rules/topics.dart)
+          if (insight.topics.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Text(
+              '자주 나온 이야기: ${insight.topics.join(', ')}',
+              style: text.labelSmall,
+            ),
+          ],
           if (insight.lines.isNotEmpty) ...[
             const SizedBox(height: 14),
-            Text('이렇게 보내 보세요 · 누르면 복사', style: text.labelSmall),
+            Text('이렇게 보내 보세요', style: text.labelSmall),
             const SizedBox(height: 8),
             Column(
               spacing: 8,
-              children: [for (final line in insight.lines) _LineBubble(line)],
+              children: [for (final line in insight.lines) CopyBubble(line)],
             ),
           ],
         ],
-      ),
-    );
-  }
-}
-
-/// 예시 멘트 말풍선, 누르면 복사
-class _LineBubble extends StatelessWidget {
-  const _LineBubble(this.line);
-
-  final String line;
-
-  void _copy(BuildContext context) {
-    Clipboard.setData(ClipboardData(text: line));
-    ScaffoldMessenger.of(context)
-      ..hideCurrentSnackBar()
-      ..showSnackBar(
-        const SnackBar(
-          content: Text('복사했어요'),
-          duration: Duration(milliseconds: 1500),
-        ),
-      );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: () => _copy(context),
-      child: Container(
-        width: double.infinity,
-        padding: const EdgeInsets.fromLTRB(14, 10, 10, 10),
-        decoration: BoxDecoration(
-          color: AppColors.warmWhite,
-          border: Border.all(color: AppColors.border),
-          // 말풍선 모양 (왼쪽 아래만 덜 둥글게)
-          borderRadius: const BorderRadius.only(
-            topLeft: Radius.circular(14),
-            topRight: Radius.circular(14),
-            bottomRight: Radius.circular(14),
-            bottomLeft: Radius.circular(4),
-          ),
-        ),
-        child: Row(
-          children: [
-            Expanded(
-              child: Text(
-                line,
-                style: Theme.of(context)
-                    .textTheme
-                    .bodyMedium
-                    ?.copyWith(fontSize: 13),
-              ),
-            ),
-            const SizedBox(width: 8),
-            const Icon(Icons.copy_rounded, size: 16, color: AppColors.warmGray),
-          ],
-        ),
       ),
     );
   }
@@ -412,7 +365,7 @@ class _StatGridState extends State<_StatGrid> {
     return [
       _Stat(
         '보통 답장',
-        reply == null ? '기록 없음' : formatMinutes(reply),
+        reply == null ? '-' : formatMinutes(reply),
         '내 메시지 다음에 상대가 답하기까지 걸린 시간의 중간값이에요. '
             '하루 넘게 걸린 답은 새 대화로 보고 빼요.',
       ),
@@ -455,13 +408,7 @@ class _StatGridState extends State<_StatGrid> {
       children: [
         Padding(
           padding: const EdgeInsets.fromLTRB(4, 8, 4, 8),
-          child: Row(
-            children: [
-              Text('대화 숫자', style: text.titleSmall),
-              const Spacer(),
-              Text('눌러서 설명 보기', style: text.labelSmall),
-            ],
-          ),
+          child: Text('대화 숫자', style: text.titleSmall),
         ),
         Row(children: [cell(0), const SizedBox(width: 8), cell(1)]),
         const SizedBox(height: 8),
@@ -577,7 +524,7 @@ class _ChangeCard extends StatelessWidget {
           if (change != null)
             _ChangeRow(
               icon: Icons.trending_up,
-              title: '이번 기간 안에서',
+              title: '분석 기간 앞쪽 → 뒤쪽',
               lines: [change],
             ),
           if (comparison != null)
@@ -590,7 +537,7 @@ class _ChangeCard extends StatelessWidget {
             const _ChangeRow(
               icon: Icons.history,
               title: '지난 분석과 비교',
-              lines: ['이 상대와의 첫 분석이에요. 며칠 뒤 다시 분석하면 달라진 점을 보여드려요.'],
+              lines: ['첫 분석이에요. 며칠 뒤 다시 분석하면 비교해 드려요.'],
             ),
         ],
       ),

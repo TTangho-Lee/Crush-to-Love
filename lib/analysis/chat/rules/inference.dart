@@ -1,10 +1,11 @@
-// 규칙 ⑤ 추론 + ⑥ 멘트: 지표 · 점수 → 지금 사이 추정, 다음 대화 방향, 예시 멘트
+// 규칙 ⑤ 추론: 지표 · 점수 → 지금 사이 추정, 다음 대화 방향, 예시 멘트
 //   지금 사이: 온보딩 · 11번과 같은 3단계(Intimacy) 중 하나로 추정 + 이유
-//   다음 대화 방향: 위에서부터 처음 맞는 상황 하나 (_strategies 순서가 우선순위)
-//   예시 멘트: 상황마다 미리 써둔 문장 중 2개 (기획 팀이 문장만 고치면 됨)
+//   다음 대화 방향: 먼저 지금 상황(오랜만 · 만난 뒤 · 첫 대화)을 보고, 아니면 _rules에서 처음 맞는 것 하나
+//   설명 · 예시 멘트: lines.dart의 멘트 사전에서 (주제 · 시간대 · 존댓말 사이 반영)
 import '../../../shared/models.dart';
 import 'features.dart';
 import 'lexicon.dart';
+import 'lines.dart';
 import 'scoring.dart';
 
 /// 대화 분석 해석 결과 (피그마 12번 아래쪽 카드)
@@ -16,6 +17,7 @@ class Insight {
     required this.strategy,
     required this.hint,
     required this.lines,
+    this.topics = const [],
   });
 
   /// 호감 신호 점수
@@ -33,21 +35,43 @@ class Insight {
   /// 다음 대화 방향 설명
   final String hint;
 
-  /// 예시 멘트 (최대 2개)
+  /// 예시 멘트 (최대 3개)
   final List<String> lines;
+
+  /// 대화에 자주 나온 주제 이름 (예: '맛집·음식'), 최대 3개
+  final List<String> topics;
 }
 
-Insight infer(ConversationFeatures f) {
+/// 마지막 메시지 뒤 이만큼 말이 없으면 '오랜만에 연락하기'
+const reconnectGap = Duration(days: 3);
+
+/// 지금까지 주고받은 메시지가 이보다 적으면 '첫 대화 시작하기'
+const firstTalkMessages = 15;
+
+/// now: 시간대 · 요일에 맞는 멘트 고르기 · 오랜만인지 보기 (기본은 지금)
+/// totalMessages: 분석 기간과 상관없이 나와 상대가 주고받은 메시지 수 (비우면 첫 대화인지 안 봄)
+Insight infer(ConversationFeatures f, {DateTime? now, int? totalMessages}) {
+  final at = now ?? DateTime.now();
   final interest = scoreInterest(f);
   final (intimacy, reason) = _estimateIntimacy(f, interest);
-  final strategy = _strategies.firstWhere((s) => s.when(f, interest));
+  final approach = _pickApproach(f, interest, at, totalMessages);
+  final topic = f.topics.isEmpty ? null : f.topics.first;
+  // 같은 대화는 같은 설명 · 멘트, 메시지 수가 달라지면 다른 것
+  final seed = f.me.count * 7 + f.them.count * 13 + f.sessionCount;
   return Insight(
     interest: interest,
     intimacy: intimacy,
     intimacyReason: reason,
-    strategy: strategy.name,
-    hint: strategy.hint,
-    lines: strategy.lines.take(2).toList(),
+    strategy: approach.label,
+    hint: pickHint(approach, seed: seed),
+    lines: pickLines(
+      approach,
+      now: at,
+      seed: seed,
+      topic: topic,
+      formal: f.me.rate(MessageTag.honorific) >= 0.5,
+    ),
+    topics: [for (final t in f.topics) t.label],
   );
 }
 
@@ -63,8 +87,17 @@ Insight infer(ConversationFeatures f) {
   if (accept != null && accept >= 0.5) {
     return (Intimacy.close, '따로 만나자는 제안을 받아들였어요');
   }
+  if (them.rate(MessageTag.plan) > 0) {
+    return (Intimacy.close, '만날 시간 · 장소를 같이 정하고 있어요');
+  }
+  if (them.rate(MessageTag.metUp) > 0 || f.me.rate(MessageTag.metUp) > 0) {
+    return (Intimacy.close, '실제로 만나서 시간을 보낸 사이예요');
+  }
   if (them.rate(MessageTag.invite) > 0) {
     return (Intimacy.close, '상대가 먼저 무언가를 하자고 제안해요');
+  }
+  if (them.rate(MessageTag.affection) > 0) {
+    return (Intimacy.close, '보고 싶다 · 생각났다는 말이 오가는 사이예요');
   }
   if (them.rate(MessageTag.personal) > 0 && interest.score >= midScore) {
     return (Intimacy.close, '서로 사적인 이야기를 나누고 있어요');
@@ -72,101 +105,137 @@ Insight infer(ConversationFeatures f) {
   if (f.lateNightRate >= 0.2 && interest.score >= 60) {
     return (Intimacy.close, '밤늦게까지 편하게 대화를 이어가요');
   }
+  if ((them.rate(MessageTag.tease) >= 0.05 ||
+          them.rate(MessageTag.aegyo) >= 0.1) &&
+      interest.score >= 55) {
+    return (Intimacy.close, '장난과 애교가 오갈 만큼 편한 사이예요');
+  }
+  if (them.rate(MessageTag.honorific) >= 0.6 &&
+      f.me.rate(MessageTag.honorific) >= 0.6) {
+    return (
+      them.textCount < 10 ? Intimacy.faceOnly : Intimacy.smallTalk,
+      '서로 존댓말을 쓰는 조심스러운 사이예요',
+    );
+  }
   if (interest.score < 35 && them.textCount < 10) {
     return (Intimacy.faceOnly, '아직 주고받은 대화가 적고 반응도 짧아요');
+  }
+  if (them.rate(MessageTag.share) >= 0.15) {
+    return (Intimacy.smallTalk, '일상 이야기를 편하게 주고받고 있어요');
+  }
+  if (them.rate(MessageTag.greeting) > 0 && them.textCount < 15) {
+    return (Intimacy.smallTalk, '인사 위주로 짧게 주고받고 있어요');
   }
   return (Intimacy.smallTalk, '인사와 가벼운 대화를 주고받고 있어요');
 }
 
 // ---------- 다음 대화 방향 ----------
 
-class _Strategy {
-  const _Strategy({
-    required this.name,
-    required this.hint,
-    required this.lines,
-    required this.when,
-  });
-
-  final String name;
-  final String hint;
-  final List<String> lines;
-  final bool Function(ConversationFeatures f, InterestScore s) when;
+/// 지금 상황 먼저 (오랜만 → 만난 뒤 → 첫 대화), 아니면 _rules
+Approach _pickApproach(
+  ConversationFeatures f,
+  InterestScore interest,
+  DateTime now,
+  int? totalMessages,
+) {
+  if (now.difference(f.lastMessageAt) >= reconnectGap) {
+    return Approach.reconnect;
+  }
+  if (f.recentMetUp) return Approach.afterMeet;
+  if (totalMessages != null && totalMessages < firstTalkMessages) {
+    return Approach.firstTalk;
+  }
+  return _rules.firstWhere((r) => r.$2(f, interest)).$1;
 }
 
+typedef _When = bool Function(ConversationFeatures f, InterestScore s);
+
 /// 위에서부터 처음 맞는 것 하나, 마지막은 항상 맞음
-final _strategies = <_Strategy>[
-  _Strategy(
-    name: '잠시 쉬어가기',
-    hint: '최근 바쁘다거나 어렵다는 말이 있었어요. 이번엔 제안보다 응원 한마디로 부담을 덜어주세요.',
-    lines: [
-      '요즘 많이 바쁘지? 무리하지 말고 밥 잘 챙겨 먹어!',
-      '바쁜 거 끝나면 맛있는 거 먹으러 가자 ㅎㅎ',
-    ],
-    when: (f, s) =>
+/// 방향 이름 · 설명 · 멘트는 lines.dart
+final List<(Approach, _When)> _rules = [
+  // 바쁘거나 지쳤거나, 제안을 받아주지 못하는 상황이면 쉬어가기
+  (
+    Approach.rest,
+    (f, s) =>
         f.them.rate(MessageTag.busy) > 0 ||
+        f.them.rate(MessageTag.tired) >= 0.2 ||
         (f.them.rate(MessageTag.decline) > 0 && (f.inviteAcceptRate ?? 0) < 0.5),
   ),
-  _Strategy(
-    name: '약속 제안해보기',
-    hint: '호감 신호가 좋아요. 대화에서 나온 관심사로 가볍게 만날 약속을 제안해보세요.',
-    lines: [
-      '이번 주에 시간 되면 같이 밥 먹을래?',
-      '저번에 얘기한 거 같이 가볼래? ㅎㅎ',
-    ],
-    when: (f, s) =>
-        s.score >= highScore &&
-        ((f.inviteAcceptRate ?? 0) >= 0.5 ||
-            f.them.rate(MessageTag.invite) > 0 ||
-            f.them.rate(MessageTag.personal) > 0 ||
-            (f.askBackRate ?? 0) >= 0.3),
+  // 속상해하거나 기분이 상해 있으면 위로부터
+  (
+    Approach.comfort,
+    (f, s) =>
+        f.them.rate(MessageTag.sad) >= 0.2 ||
+        f.them.rate(MessageTag.negative) >= 0.2,
   ),
-  _Strategy(
-    name: '질문 주고받기',
-    hint: '상대도 나를 궁금해하고 있어요. 대답 끝에 질문을 하나 붙여 대화를 이어가세요.',
-    lines: [
-      '나는 요즘 산책하는 재미에 빠졌어 ㅋㅋ 너는 요즘 뭐 재밌게 봐?',
-      '주말엔 보통 뭐 하면서 쉬어?',
-    ],
-    when: (f, s) =>
+  // 만나자는 이야기가 이미 오갔으면 구체적으로
+  (
+    Approach.fixPlan,
+    (f, s) =>
+        (f.inviteAcceptRate ?? 0) >= 0.5 ||
+        f.them.rate(MessageTag.invite) > 0 ||
+        f.them.rate(MessageTag.plan) > 0,
+  ),
+  // 호감 신호가 높고 사적인 대화가 오가면 제안
+  (
+    Approach.invite,
+    (f, s) =>
+        s.score >= highScore &&
+        (f.them.rate(MessageTag.personal) > 0 ||
+            (f.askBackRate ?? 0) >= 0.3 ||
+            f.them.rate(MessageTag.affection) > 0 ||
+            f.lateNightRate >= 0.2),
+  ),
+  // 상대가 존댓말이면 말 편하게
+  (Approach.breakIce, (f, s) => f.them.rate(MessageTag.honorific) >= 0.5),
+  // 설레는 분위기면 마음 살짝
+  (
+    Approach.openUp,
+    (f, s) =>
+        s.score >= 60 &&
+        (f.them.rate(MessageTag.affection) > 0 ||
+            f.them.rate(MessageTag.aegyo) >= 0.1 ||
+            f.them.rate(MessageTag.tease) >= 0.05 ||
+            f.them.rate(MessageTag.compliment) > 0),
+  ),
+  // 상대도 나를 궁금해하면 질문 주고받기
+  (
+    Approach.askBack,
+    (f, s) =>
         (f.askBackRate ?? 0) >= 0.3 || f.them.rate(MessageTag.question) >= 0.25,
   ),
-  _Strategy(
-    name: '가볍게 말 걸기',
-    hint: '답이 짧은 편이에요. 길게 쓰지 않아도 답할 수 있는 가벼운 질문부터 건네보세요.',
-    lines: [
-      '오늘 점심 뭐 먹었어?',
-      '이 노래 들어봤어? 요즘 계속 듣는 중 ㅎㅎ',
-    ],
-    when: (f, s) =>
+  // 상대가 자기 이야기를 먼저 하면 리액션
+  (
+    Approach.react,
+    (f, s) =>
+        f.them.rate(MessageTag.share) >= 0.15 ||
+        f.them.rate(MessageTag.recommend) > 0,
+  ),
+  // 답이 짧으면 가벼운 질문부터
+  (
+    Approach.light,
+    (f, s) =>
         f.them.rate(MessageTag.shortReply) >= 0.3 ||
         (f.them.textCount > 0 && f.them.avgLength < 6),
   ),
-  _Strategy(
-    name: '여유 있게 기다리기',
-    hint: '답장에 시간이 걸리는 편이에요. 여러 개 보내기보다 한 번에 하나만 보내고 기다려 주세요.',
-    lines: [
-      '시간 날 때 편하게 답해줘 ㅎㅎ',
-      '오늘 하루 어땠어? 생각나서 연락했어',
-    ],
-    when: (f, s) => (f.them.replyMedianMinutes ?? 0) >= 120,
+  // 내 메시지만 길면 길이 맞추기
+  (
+    Approach.lighten,
+    (f, s) => f.them.textCount > 0 && f.lengthBalance < 0.5,
   ),
-  _Strategy(
-    name: '웃었던 주제 이어가기',
-    hint: '반응이 따뜻한 편이에요. 지난 대화에서 같이 웃었던 주제로 먼저 말을 걸어보세요.',
-    lines: [
-      '저번에 얘기한 그거 생각나서 연락했어 ㅋㅋ',
-      '이거 보자마자 네 생각났어 ㅋㅋ',
-    ],
-    when: (f, s) => f.them.warmRate >= 0.3,
+  // 답이 늦으면 여유 있게
+  (Approach.patience, (f, s) => (f.them.replyMedianMinutes ?? 0) >= 120),
+  // 늘 내가 먼저 시작하면 템포 맞추기
+  (
+    Approach.tempo,
+    (f, s) => f.sessionCount >= 3 && f.theirStartRate == 0,
   ),
-  _Strategy(
-    name: '공통 관심사 찾기',
-    hint: '대화가 꾸준히 오가고 있어요. 공통 관심사 하나를 골라 조금 더 깊게 물어보세요.',
-    lines: [
-      '요즘 제일 재밌는 게 뭐야?',
-      '너는 시험 끝나면 제일 먼저 뭐 하고 싶어?',
-    ],
-    when: (f, s) => true,
+  // 반응이 따뜻하면 웃었던 주제
+  (Approach.laughTopic, (f, s) => f.them.warmRate >= 0.3),
+  // 대화가 드물면 인사 습관
+  (
+    Approach.routine,
+    (f, s) => f.sessionCount <= 2 && f.them.count < 15,
   ),
+  (Approach.common, (f, s) => true),
 ];
