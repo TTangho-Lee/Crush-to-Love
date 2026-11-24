@@ -428,10 +428,8 @@ class _StatGridState extends State<_StatGrid> {
                     color: AppColors.ivory,
                     borderRadius: BorderRadius.circular(12),
                   ),
-                  child: Text(
-                    '${items[open].label} · ${items[open].description}',
-                    style: text.bodySmall,
-                  ),
+                  // 고른 칸이 분홍이라 이름은 다시 안 붙임
+                  child: Text(items[open].description, style: text.bodySmall),
                 ),
         ),
       ],
