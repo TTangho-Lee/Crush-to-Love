@@ -16,7 +16,7 @@ import 'onboarding/start_screen.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // 웹(크롬)에서는 브라우저용 SQLite 사용, DB 열기 전에 한 번만
+  // 웹(크롬)에서는 브라우저용 SQLite 사용, DB 열기 전에 한 번만 test
   if (kIsWeb) databaseFactory = databaseFactoryFfiWeb;
 
   // 온보딩을 끝낸 적 있으면 홈부터
