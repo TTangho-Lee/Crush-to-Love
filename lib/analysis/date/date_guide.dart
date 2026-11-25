@@ -59,7 +59,7 @@ enum Company {
   final IconData icon;
 }
 
-/// 10번 화면에서 고른 조건 jgvvj
+/// 10번 화면에서 고른 조건
 class DateChoice {
   const DateChoice({
     this.place = DatePlace.cafe,

@@ -15,11 +15,12 @@ import 'date_lines.dart';
 
 /// 온보딩 입력값 + 대화 분석 결과 → 가이드에 반영할 상황
 /// 실제 대화 분석이 있으면 지금 사이 · 주제 · 존댓말은 대화 기준, 없으면 온보딩 기준
-GuideBasis guideBasisOf(Profile profile, ChatStats chat) {
+/// useChat: 마지막 분석이 지금 상대와의 대화일 때만 true (다른 상대 대화면 온보딩 기준)
+GuideBasis guideBasisOf(Profile profile, ChatStats chat, {bool useChat = true}) {
   final features = chat.features;
   final insight = chat.insight;
   final courage = CourageLevel.of(profile.courage);
-  if (chat.isExample || features == null || insight == null) {
+  if (!useChat || chat.isExample || features == null || insight == null) {
     return GuideBasis(
       intimacy: profile.intimacy,
       courage: courage,
@@ -89,7 +90,7 @@ DateGuide buildDateGuide({
       ]),
       GuideItem(GuideKind.talk, [
         ...pick(talkLines[choice.place], 5, count: topicLine == null ? 2 : 1),
-        if (topicLine != null) topicLine,
+        ?topicLine,
       ]),
       GuideItem(GuideKind.mood, [
         ...pick(moodLines[basis.intimacy], 6),
@@ -108,6 +109,18 @@ DateGuide buildDateGuide({
     ),
   );
 }
+
+/// 대화에 자주 나온 주제에 어울리는 데이트 장소, 없으면 null (대화 분석 → 데이트 준비하기에서 미리 고름)
+DatePlace? placeForTopic(Topic topic) => switch (topic) {
+      Topic.food || Topic.cook => DatePlace.restaurant,
+      Topic.cafe || Topic.book => DatePlace.cafe,
+      Topic.movie => DatePlace.movie,
+      Topic.drink => DatePlace.bar,
+      Topic.campus || Topic.study => DatePlace.campus,
+      Topic.exercise || Topic.pet || Topic.travel => DatePlace.walk,
+      Topic.photo || Topic.hobby => DatePlace.exhibition,
+      _ => null,
+    };
 
 /// 대화에 자주 나온 주제로 물어볼 말 (채팅 주제 멘트 중 시간 상관없는 '묻기')
 String? _topicQuestion(Topic topic, GuideBasis basis, int seed) {
