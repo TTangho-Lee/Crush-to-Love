@@ -1,13 +1,16 @@
 // 피그마 9번 화면 (우리 대화 돌아보기)
 // 세 단계로 나눠서 위에서부터 채우면 되게
 //   ① 대화 넣기: 'txt 파일 불러오기' 또는 직접 붙여넣기 (안드로이드는 카톡 공유로도 들어옴)
-//   ② 분석 기간: 지금부터 며칠 · 몇 시간 전까지, 바꾸면 불러온 대화도 다시 잘라 넣음
+//   ② 분석 기간: 하루 · 3일 · 1주 · 2주 · 한 달 중 하나 (_ranges), 바꾸면 불러온 대화도 다시 잘라 넣음
 //   ③ 대화 속 사람: 내 이름 · 짝사랑 상대 고르기 (대화에 나온 이름 중에서)
-//      기본값: 내 이름은 추측 (1:1 파일 첫 줄 → '나' → 둘이면 먼저 말한 사람), 상대는 둘이면 나머지 한 명
+//      기본값: 내 이름은 추측 (1:1 파일 첫 줄 → '나' → 둘이면 먼저 말한 사람)
+//              상대는 앱의 상대에 연결해 둔 카톡 이름(지금 상대 먼저) → 둘이면 나머지 한 명
 //      단톡방은 상대를 꼭 골라야 함, 고른 사람과 나의 메시지만 분석
 // 입력칸 아래 한 줄로 지금 넣은 대화 상태 (메시지 수 · 사람 수, 형식 오류)
+// 카톡에서 가져오는 법 (import_guide.dart): ① 제목 오른쪽 '? 가져오는 법'을 누르면 아래에서 올라옴
 // 기호로 알 수 있는 건 글자로 따로 안 씀 (▾ 고르기, ✓ 읽음, ~ 기간)
 // '대화 분석하기'를 눌러야 분석, 성공하면 12번, 실패하면 이유를 버튼 위에 표시
+//   다른 상대에 연결된 카톡 이름이면 지금 상대도 그 상대로 바꿈 (CrushStore.followChat)
 // 몇 년치 파일도 멈추지 않게
 //   파일 · 공유는 최근 keepDays(31)일만 남기고 읽음 (chat_parser.dart)
 //   대화 읽기는 백그라운드(compute)에서 한 번만 하고 읽은 결과를 다시 씀
@@ -19,6 +22,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
 import 'package:material_ui/material_ui.dart';
 
+import '../../onboarding/data/crush_store.dart';
 import '../../shared/app_colors.dart';
 import '../../shared/widgets/app_header.dart';
 import '../../shared/widgets/app_text_field.dart';
@@ -27,6 +31,16 @@ import '../../shared/widgets/primary_button.dart';
 import 'chat_analyzer.dart';
 import 'chat_store.dart';
 import 'conversation_result_screen.dart';
+import 'import_guide.dart';
+
+/// 분석 기간 칩 (한 달은 keepDays 안이 되게 30일)
+const List<(Duration, String)> _ranges = [
+  (Duration(days: 1), '하루'),
+  (Duration(days: 3), '3일'),
+  (Duration(days: 7), '1주'),
+  (Duration(days: 14), '2주'),
+  (Duration(days: 30), '한 달'),
+];
 
 /// 직접 붙여넣은 대화를 읽기 전 기다리는 시간 (입력 중엔 안 읽음)
 const _typingPause = Duration(milliseconds: 600);
@@ -52,10 +66,8 @@ class ConversationInputScreen extends StatefulWidget {
 class _ConversationInputScreenState extends State<ConversationInputScreen> {
   final _chatController = TextEditingController();
 
-  /// 분석 기간: 지금부터 _days일 _hours시간 전까지
-  int _days = defaultRange.inDays;
-  int _hours = 0;
-  Duration get _range => Duration(days: _days, hours: _hours);
+  /// 분석 기간: 지금부터 이만큼 전까지 (_ranges 중 하나)
+  Duration _range = defaultRange;
 
   /// 파일 · 공유로 받아 읽어 둔 전체 대화 (기간을 바꾸면 여기서 다시 자름), 직접 고치면 null
   ParsedChat? _source;
@@ -223,11 +235,25 @@ class _ConversationInputScreenState extends State<ConversationInputScreen> {
     });
   }
 
-  /// 상대가 비었거나 나와 같으면: 둘이면 나머지 한 명, 단톡방이면 비움
+  /// 상대가 비었거나 나와 같으면: 연결해 둔 카톡 이름 → 둘이면 나머지 한 명 → 단톡방이면 비움
   void _fixPartner() {
     final others = _others;
     if (others.contains(_partner)) return;
-    _partner = others.length == 1 ? others.first : null;
+    _partner = _linkedPartner(others) ??
+        (others.length == 1 ? others.first : null);
+  }
+
+  /// 앱의 상대에 연결해 둔 카톡 이름 중 대화에 있는 사람 (지금 상대 먼저), 없으면 null
+  String? _linkedPartner(List<String> others) {
+    final crushes = CrushScope.read(context);
+    if (crushes == null) return null;
+    final current = crushes.current;
+    for (final c in [?current, ...crushes.active]) {
+      for (final name in c.chatNames) {
+        if (others.contains(name)) return name;
+      }
+    }
+    return null;
   }
 
   // ---------- 버튼 ----------
@@ -260,11 +286,8 @@ class _ConversationInputScreenState extends State<ConversationInputScreen> {
     _fillChat(compute(_readShared, chat));
   }
 
-  void _setRange({int? days, int? hours}) {
-    setState(() {
-      _days = days ?? _days;
-      _hours = hours ?? _hours;
-    });
+  void _setRange(Duration range) {
+    setState(() => _range = range);
     if (_source != null) {
       _applyRange();
     } else if (_typed != null) {
@@ -284,10 +307,6 @@ class _ConversationInputScreenState extends State<ConversationInputScreen> {
     final chat = _chatController.text;
     if (chat.trim().isEmpty) {
       setState(() => _error = '대화를 붙여넣거나 txt 파일을 불러와 주세요.');
-      return;
-    }
-    if (_range == Duration.zero) {
-      setState(() => _error = '분석 기간을 1시간 이상으로 골라 주세요.');
       return;
     }
     // 이름 목록이 있으면 둘 다 골라야 함 (없으면 분석기가 추측)
@@ -344,6 +363,13 @@ class _ConversationInputScreenState extends State<ConversationInputScreen> {
       return;
     }
     setState(() => _busy = false);
+    // 다른 상대에 연결된 대화면 지금 상대를 그 상대로 (머리글 '서연 ▾'로 바뀜)
+    final partner = store.stats.record?.partner;
+    final crushes = CrushScope.read(context);
+    if (partner != null && crushes != null) {
+      await crushes.followChat(partner);
+      if (!mounted) return;
+    }
     // 피그마 12번으로 (대화 탭 안에서 이동, 하단 탭 유지)
     FocusScope.of(context).unfocus();
     Navigator.push(
@@ -380,6 +406,18 @@ class _ConversationInputScreenState extends State<ConversationInputScreen> {
             _Step(
               number: 1,
               title: '대화 넣기',
+              trailing: TextButton.icon(
+                onPressed: () => showImportGuide(context),
+                icon: const Icon(Icons.help_outline, size: 15),
+                label: const Text('가져오는 법'),
+                style: TextButton.styleFrom(
+                  foregroundColor: AppColors.warmGray,
+                  textStyle: text.labelSmall,
+                  padding: const EdgeInsets.symmetric(horizontal: 6),
+                  minimumSize: const Size(0, 28),
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
+              ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -405,21 +443,18 @@ class _ConversationInputScreenState extends State<ConversationInputScreen> {
             _Step(
               number: 2,
               title: '분석 기간',
+              // 지금부터 고른 기간 전까지
               child: Row(
+                spacing: 6,
                 children: [
-                  _Dropdown<int>(
-                    value: _days,
-                    items: [for (var i = 0; i <= 30; i++) (i, '$i일')],
-                    onChanged: (v) => _setRange(days: v),
-                  ),
-                  const SizedBox(width: 6),
-                  _Dropdown<int>(
-                    value: _hours,
-                    items: [for (var i = 0; i <= 23; i++) (i, '$i시간')],
-                    onChanged: (v) => _setRange(hours: v),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(child: Text('전 ~ 지금', style: text.bodySmall)),
+                  for (final (range, label) in _ranges)
+                    Expanded(
+                      child: _RangeChip(
+                        label: label,
+                        selected: range == _range,
+                        onTap: () => _setRange(range),
+                      ),
+                    ),
                 ],
               ),
             ),
@@ -522,11 +557,15 @@ class _Step extends StatelessWidget {
     required this.number,
     required this.title,
     required this.child,
+    this.trailing,
   });
 
   final int number;
   final String title;
   final Widget child;
+
+  /// 제목 줄 오른쪽 끝 (예: '가져오는 법'), 없으면 null
+  final Widget? trailing;
 
   @override
   Widget build(BuildContext context) {
@@ -550,6 +589,8 @@ class _Step extends StatelessWidget {
               ),
               const SizedBox(width: 8),
               Text(title, style: text.titleSmall),
+              const Spacer(),
+              ?trailing,
             ],
           ),
           const SizedBox(height: 12),
@@ -672,7 +713,46 @@ class _ErrorBox extends StatelessWidget {
   }
 }
 
-/// 작은 고르기 칸 ('7일 ▾', '내 이름 ▾')
+/// 분석 기간 칩, 고르면 분홍 바탕
+class _RangeChip extends StatelessWidget {
+  const _RangeChip({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        height: 34,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: selected ? AppColors.rose : AppColors.warmWhite,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(
+            color: selected ? AppColors.peach : AppColors.border,
+          ),
+        ),
+        child: Text(
+          label,
+          maxLines: 1,
+          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: AppColors.charcoal,
+                fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+              ),
+        ),
+      ),
+    );
+  }
+}
+
+/// 작은 고르기 칸 ('내 이름 ▾')
 class _Dropdown<T> extends StatelessWidget {
   const _Dropdown({
     required this.value,

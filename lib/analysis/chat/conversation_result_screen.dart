@@ -3,23 +3,34 @@
 // 위에서부터 결론 → 근거 → 할 일 → 자세한 숫자 순서
 //   호감 신호: 점수 + 막대 + 점수를 올리고 내린 근거 (rules/scoring.dart)
 //   다음 대화: 추천 방향 + 자주 나온 이야기 + 예시 멘트 3개 (누르면 복사, 복사 아이콘으로만 표시)
+//     '↻ 다른 추천 보기': 같은 방향으로 다른 멘트, 약속 방향이면 '데이트 준비하기 →' (주제에 맞는 장소를 미리 고름)
 //   지금 사이: 대화로 본 친밀도 + 홈에서 관계 업데이트
 //   대화 숫자: 4칸, 누르면 아래에 설명 (ⓘ 아이콘으로만 표시, rules/features.dart 값)
 //   달라진 점: 분석 기간 안 변화 + 지난 분석과 비교 (history 폴더)
+//   카톡 이름이 아직 어느 상대에도 연결 안 됐으면 맨 위에 '이 대화 상대는 누구예요?' (한 번 고르면 다음부터 안 물음)
+//     골라 두고 '확인'을 누르면 연결, 고른 상대가 지금 상대가 됨, 별명과 카톡 이름이 똑같으면 묻지 않고 연결 (CrushStore.followChat)
+//   맨 아래 '분석 기록 모아보기' (history/history_screen.dart)
 // 기호로 알 수 있는 건 글자로 따로 안 씀 (복사 · 설명 · 증감은 아이콘 · +/- · →)
 import 'package:material_ui/material_ui.dart';
 
+import '../../app/crush_switcher.dart';
 import '../../app/main_shell.dart';
+import '../../onboarding/data/crush_store.dart';
 import '../../shared/app_colors.dart';
 import '../../shared/widgets/app_header.dart';
 import '../../shared/widgets/copy_bubble.dart';
+import '../../shared/widgets/primary_button.dart';
 import '../../shared/widgets/progress_bar.dart';
 import '../../shared/widgets/secondary_button.dart';
+import '../date/date_guide_rules.dart';
+import '../date/date_store.dart';
 import 'chat_analyzer.dart';
 import 'chat_stats.dart';
 import 'chat_store.dart';
 import 'history/chat_record.dart';
+import 'history/history_screen.dart';
 import 'rules/inference.dart';
+import 'rules/lines.dart';
 import 'rules/scoring.dart';
 
 class ConversationResultScreen extends StatelessWidget {
@@ -34,6 +45,15 @@ class ConversationResultScreen extends StatelessWidget {
     final canClear = !stats.isExample &&
         stats.record != null &&
         (store.comparison != null || store.isFirstAnalysis);
+    // 이 카톡 이름을 어느 상대로 볼지 아직 안 정했으면 물어봄
+    final crushes = CrushScope.maybeOf(context);
+    final partner = stats.record?.partner;
+    final askLink = !stats.isExample &&
+        crushes != null &&
+        crushes.active.isNotEmpty &&
+        partner != null &&
+        crushes.crushForChatName(partner) == null &&
+        !crushes.isSkipped(partner);
 
     return Scaffold(
       body: SafeArea(
@@ -50,9 +70,12 @@ class ConversationResultScreen extends StatelessWidget {
             Column(
               spacing: 12,
               children: [
+                // askLink가 true면 partner · crushes는 null이 아님 (Dart가 알아서 좁혀 줌)
+                if (askLink) _LinkCard(partner: partner, crushes: crushes),
                 if (insight != null) ...[
                   _ScoreCard(interest: insight.interest),
-                  _NextTalkCard(insight: insight),
+                  // 새 분석이면 '다른 추천 보기' 횟수를 처음부터
+                  _NextTalkCard(key: ObjectKey(insight), insight: insight),
                   _IntimacyCard(insight: insight),
                 ] else
                   _Box(
@@ -71,6 +94,15 @@ class ConversationResultScreen extends StatelessWidget {
               label: '대화 다시 입력하기',
               // 피그마 9번으로 돌아가기 (입력한 대화는 그대로 남아 있음)
               onPressed: () => Navigator.pop(context),
+            ),
+            Center(
+              child: TextButton(
+                // 하단 탭 없이 전체 화면
+                onPressed: () => Navigator.of(context, rootNavigator: true).push(
+                  MaterialPageRoute(builder: (_) => const HistoryScreen()),
+                ),
+                child: Text('분석 기록 모아보기 ›', style: text.titleSmall),
+              ),
             ),
             if (canClear)
               Center(
@@ -107,6 +139,99 @@ class ConversationResultScreen extends StatelessWidget {
 }
 
 // ---------- 카드 ----------
+
+/// '이 대화 상대(지민)는 누구예요?' [앱의 상대들] [+ 새 상대] [분석만] → '확인'
+/// 골라 두고 '확인'을 눌러야 정해짐, 상대를 고르면 연결하고 그 상대가 지금 상대가 됨
+/// 다음 분석부터 그 상대를 자동으로 고름, '분석만'은 이 이름을 다시 안 물음
+class _LinkCard extends StatefulWidget {
+  const _LinkCard({required this.partner, required this.crushes});
+
+  /// 카톡 이름
+  final String partner;
+  final CrushStore crushes;
+
+  @override
+  State<_LinkCard> createState() => _LinkCardState();
+}
+
+/// 고른 것 (상대 · 새 상대 · 분석만)
+enum _Link { crush, newCrush, skip }
+
+class _LinkCardState extends State<_LinkCard> {
+  /// 고른 것, 상대면 그 상대 id (아직 안 골랐으면 null)
+  (_Link, int?)? _picked;
+
+  Future<void> _confirm() async {
+    final picked = _picked;
+    if (picked == null) return;
+    final crushes = widget.crushes;
+    final partner = widget.partner;
+    switch (picked) {
+      case (_Link.crush, final int id):
+        await crushes.linkChatName(id, partner);
+        if (id != crushes.current?.id) await crushes.select(id);
+      case (_Link.newCrush, _):
+        await startNewCrush(context, chatName: partner);
+      case (_Link.skip, _):
+        await crushes.skipChatName(partner);
+      case (_Link.crush, null):
+        break;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final text = Theme.of(context).textTheme;
+
+    Widget choice(String label, (_Link, int?) value) {
+      final selected = _picked == value;
+      return OutlinedButton(
+        onPressed: () => setState(() => _picked = value),
+        style: OutlinedButton.styleFrom(
+          backgroundColor: selected ? AppColors.rose : AppColors.warmWhite,
+          foregroundColor: AppColors.charcoal,
+          side: BorderSide(color: selected ? AppColors.peach : AppColors.border),
+          textStyle: text.titleSmall?.copyWith(fontSize: 12),
+          minimumSize: const Size(0, 34),
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(10),
+          ),
+        ),
+        child: Text(label),
+      );
+    }
+
+    return _Box(
+      color: AppColors.roseSoft,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text("이 대화 상대 '${widget.partner}'는 누구예요?", style: text.titleSmall),
+          const SizedBox(height: 4),
+          Text('연결해 두면 다음 분석부터 상대를 자동으로 골라요.', style: text.bodySmall),
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 6,
+            runSpacing: 6,
+            children: [
+              for (final c in widget.crushes.active)
+                choice(c.nickname, (_Link.crush, c.id)),
+              choice('+ 새 상대', (_Link.newCrush, null)),
+              choice('분석만', (_Link.skip, null)),
+            ],
+          ),
+          const SizedBox(height: 12),
+          PrimaryButton(
+            label: '확인',
+            onPressed: _picked == null ? null : _confirm,
+          ),
+        ],
+      ),
+    );
+  }
+}
 
 /// 결과 화면 카드 바탕 (기본 흰 바탕 + 테두리)
 class _Box extends StatelessWidget {
@@ -252,15 +377,49 @@ class _SignalRow extends StatelessWidget {
   }
 }
 
-/// 다음 대화: 추천 방향 + 설명 + 예시 멘트 (누르면 복사)
-class _NextTalkCard extends StatelessWidget {
-  const _NextTalkCard({required this.insight});
+/// 데이트 준비로 이어지는 방향 (약속 제안 · 구체화)
+const _toDateApproaches = {Approach.invite, Approach.fixPlan};
+
+/// 다음 대화: 추천 방향 + 설명 + 예시 멘트 (누르면 복사) + 다른 추천 · 데이트 준비
+class _NextTalkCard extends StatefulWidget {
+  const _NextTalkCard({super.key, required this.insight});
 
   final Insight insight;
 
   @override
+  State<_NextTalkCard> createState() => _NextTalkCardState();
+}
+
+class _NextTalkCardState extends State<_NextTalkCard> {
+  /// '다른 추천 보기'를 누른 횟수
+  int _round = 0;
+
+  /// 데이트 탭으로, 자주 나온 주제에 맞는 장소가 있으면 미리 고름
+  void _openDate() {
+    final topic = widget.insight.topic;
+    final place = topic == null ? null : placeForTopic(topic);
+    if (place != null) {
+      final date = DateScope.of(context);
+      date.choose(date.choice.copyWith(place: place));
+    }
+    MainShell.tabIndex.value = 3;
+  }
+
+  @override
   Widget build(BuildContext context) {
     final text = Theme.of(context).textTheme;
+    final insight = widget.insight;
+    final lines = insight.linesAt(_round);
+    final canShuffle = insight.approach != null && lines.isNotEmpty;
+    final toDate = _toDateApproaches.contains(insight.approach);
+
+    final buttonStyle = TextButton.styleFrom(
+      foregroundColor: AppColors.charcoal,
+      textStyle: text.titleSmall?.copyWith(fontSize: 12),
+      padding: const EdgeInsets.symmetric(horizontal: 8),
+      minimumSize: const Size(0, 32),
+      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+    );
 
     return _Box(
       color: AppColors.ivory,
@@ -280,13 +439,33 @@ class _NextTalkCard extends StatelessWidget {
               style: text.labelSmall,
             ),
           ],
-          if (insight.lines.isNotEmpty) ...[
+          if (lines.isNotEmpty) ...[
             const SizedBox(height: 14),
             Text('이렇게 보내 보세요', style: text.labelSmall),
             const SizedBox(height: 8),
             Column(
               spacing: 8,
-              children: [for (final line in insight.lines) CopyBubble(line)],
+              children: [for (final line in lines) CopyBubble(line)],
+            ),
+          ],
+          if (canShuffle || toDate) ...[
+            const SizedBox(height: 6),
+            Row(
+              children: [
+                if (canShuffle)
+                  TextButton(
+                    onPressed: () => setState(() => _round++),
+                    style: buttonStyle,
+                    child: const Text('↻ 다른 추천 보기'),
+                  ),
+                const Spacer(),
+                if (toDate)
+                  TextButton(
+                    onPressed: _openDate,
+                    style: buttonStyle,
+                    child: const Text('데이트 준비하기 →'),
+                  ),
+              ],
             ),
           ],
         ],
