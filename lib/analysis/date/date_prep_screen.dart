@@ -1,10 +1,12 @@
 // 피그마 10번 화면 (데이트 준비하기)
 // 장소 · 날씨 · 시간 · 인원을 칩으로 고르고 '준비 가이드 보기' → 13번
-// 지금 사이 · 용기 · 목표는 온보딩 입력값, 대화 분석이 있으면 사이 · 주제는 분석 결과 (guideBasisOf)
+// 지금 사이 · 용기 · 목표는 지금 상대의 입력값, 마지막 대화 분석이 지금 상대와의 대화면 사이 · 주제는 분석 결과 (guideBasisOf)
+// 지금 상대가 없으면 (예시 화면) 미션 흐름의 예시 입력값
 // 고른 조건은 DateStore에 (탭을 옮겨도 그대로)
 import 'package:material_ui/material_ui.dart';
 
 import '../../mission/data/mission_store.dart';
+import '../../onboarding/data/crush_store.dart';
 import '../../shared/app_colors.dart';
 import '../../shared/widgets/app_header.dart';
 import '../../shared/widgets/primary_button.dart';
@@ -22,9 +24,16 @@ class DatePrepScreen extends StatelessWidget {
     final text = Theme.of(context).textTheme;
     final store = DateScope.of(context);
     final choice = store.choice;
+    final crushes = CrushScope.maybeOf(context);
+    final chat = ChatScope.of(context).stats;
+    final partner = chat.record?.partner;
     final basis = guideBasisOf(
-      MissionScope.of(context).profile,
-      ChatScope.of(context).stats,
+      crushes?.profile ?? MissionScope.of(context).profile,
+      chat,
+      // 지금 상대가 있으면 그 상대 대화일 때만
+      useChat: crushes == null ||
+          crushes.current == null ||
+          (partner != null && crushes.chatBelongsToCurrent(partner)),
     );
 
     return Scaffold(

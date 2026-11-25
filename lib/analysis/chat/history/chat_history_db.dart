@@ -59,4 +59,17 @@ abstract final class ChatHistoryDb {
     final db = await _open();
     await db.delete('chat_record', where: 'partner = ?', whereArgs: [partner]);
   }
+
+  /// 모든 상대의 기록 (분석 기록 모아보기, 마지막 메시지 시각 순)
+  static Future<List<ChatRecord>> loadAll() async {
+    final db = await _open();
+    final rows = await db.query('chat_record', orderBy: 'last_message_at');
+    return [for (final row in rows) ChatRecord.fromRow(row)];
+  }
+
+  /// 모두 지우기 (설정 '데이터 전체 삭제')
+  static Future<void> clearAll() async {
+    final db = await _open();
+    await db.delete('chat_record');
+  }
 }

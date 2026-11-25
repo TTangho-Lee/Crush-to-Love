@@ -7,6 +7,7 @@ import 'features.dart';
 import 'lexicon.dart';
 import 'lines.dart';
 import 'scoring.dart';
+import 'topics.dart';
 
 /// 대화 분석 해석 결과 (피그마 12번 아래쪽 카드)
 class Insight {
@@ -18,6 +19,10 @@ class Insight {
     required this.hint,
     required this.lines,
     this.topics = const [],
+    this.approach,
+    this.topic,
+    this.formal = false,
+    this.seed = 0,
   });
 
   /// 호감 신호 점수
@@ -40,6 +45,33 @@ class Insight {
 
   /// 대화에 자주 나온 주제 이름 (예: '맛집·음식'), 최대 3개
   final List<String> topics;
+
+  /// 다음 대화 방향, 예시 결과엔 없음 (있으면 '다른 추천 보기'로 멘트를 다시 고름)
+  final Approach? approach;
+
+  /// 예시 멘트에 쓴 주제 (가장 자주 나온 것)
+  final Topic? topic;
+
+  /// 존댓말 멘트를 썼으면 true
+  final bool formal;
+
+  /// 멘트를 고를 때 쓴 seed
+  final int seed;
+
+  /// '다른 추천 보기' round번째 멘트 (0이면 처음 멘트, 방향을 모르면 처음 멘트 그대로)
+  /// 한 번에 lines 개수만큼 건너뛰어서 앞 멘트와 겹치지 않게
+  List<String> linesAt(int round, {DateTime? now}) {
+    final approach = this.approach;
+    if (round == 0 || approach == null || lines.isEmpty) return lines;
+    return pickLines(
+      approach,
+      now: now ?? DateTime.now(),
+      seed: seed + round * lines.length,
+      topic: topic,
+      formal: formal,
+      count: lines.length,
+    );
+  }
 }
 
 /// 마지막 메시지 뒤 이만큼 말이 없으면 '오랜만에 연락하기'
@@ -58,6 +90,7 @@ Insight infer(ConversationFeatures f, {DateTime? now, int? totalMessages}) {
   final topic = f.topics.isEmpty ? null : f.topics.first;
   // 같은 대화는 같은 설명 · 멘트, 메시지 수가 달라지면 다른 것
   final seed = f.me.count * 7 + f.them.count * 13 + f.sessionCount;
+  final formal = f.me.rate(MessageTag.honorific) >= 0.5;
   return Insight(
     interest: interest,
     intimacy: intimacy,
@@ -69,9 +102,13 @@ Insight infer(ConversationFeatures f, {DateTime? now, int? totalMessages}) {
       now: at,
       seed: seed,
       topic: topic,
-      formal: f.me.rate(MessageTag.honorific) >= 0.5,
+      formal: formal,
     ),
     topics: [for (final t in f.topics) t.label],
+    approach: approach,
+    topic: topic,
+    formal: formal,
+    seed: seed,
   );
 }
 

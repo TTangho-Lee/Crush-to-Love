@@ -6,10 +6,13 @@ plugins {
 
 android {
     namespace = "com.seungho.one_way_love"
-    compileSdk = flutter.compileSdkVersion
+    // D-Day 알림(flutter_local_notifications)이 37 이상을 요구
+    compileSdk = maxOf(flutter.compileSdkVersion, 37)
     ndkVersion = flutter.ndkVersion
 
     compileOptions {
+        // D-Day 알림(flutter_local_notifications)에 필요
+        isCoreLibraryDesugaringEnabled = true
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
@@ -46,4 +49,9 @@ kotlin {
 
 flutter {
     source = "../.."
+}
+
+dependencies {
+    // isCoreLibraryDesugaringEnabled와 짝
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")
 }

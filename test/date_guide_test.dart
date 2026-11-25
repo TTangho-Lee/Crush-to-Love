@@ -203,6 +203,12 @@ void main() {
     check('formalTipLines', formalTipLines, CourageLevel.values);
   });
 
+  test('대화 주제 → 데이트 장소 (없으면 그대로)', () {
+    expect(placeForTopic(Topic.food), DatePlace.restaurant);
+    expect(placeForTopic(Topic.movie), DatePlace.movie);
+    expect(placeForTopic(Topic.weather), isNull);
+  });
+
   test('실제 대화 분석이 있으면 지금 사이 · 주제는 분석 기준', () {
     final profile = Profile(
       dDay: now,

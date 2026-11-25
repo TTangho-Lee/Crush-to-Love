@@ -1,10 +1,18 @@
 // 여러 흐름이 같이 쓰는 데이터 모양 (온보딩 · 미션 · 데이트)
+// 짝사랑 상대는 여러 명일 수 있음 (Crush), 미션 흐름에는 지금 상대 + 내 용기를 합친 Profile을 넘김
 
 /// 'D-20' 같은 글자, 0 이하면 'D-Day'
 String dDayLabel(int days) => days <= 0 ? 'D-Day' : 'D-$days';
 
 /// D-Day 사유 태그 (피그마 2번)
-const reasonTags = ['종강', '군 입대', '졸업', '방학', '기타'];
+const reasonTags = ['종강', '군 입대', '졸업', '방학', otherReason];
+
+/// 직접 입력하는 사유 태그, 고르면 글자를 따로 받아 그 글자를 사유로 저장 (예: '이사')
+const otherReason = '기타';
+
+/// 태그에 있는 사유면 그 태그, 직접 입력한 사유면 '기타' (화면에서 고른 태그 표시용)
+String reasonTagOf(String reason) =>
+    reasonTags.contains(reason) ? reason : otherReason;
 
 /// 친밀도 (피그마 3번, 11번)
 enum Intimacy {
@@ -85,4 +93,85 @@ class Profile {
       goal: goal ?? this.goal,
     );
   }
+}
+
+/// 짝사랑 상대 한 명 (상대마다 따로 저장)
+/// 용기 배터리는 나에 대한 값이라 여기 없음 (CrushStore.courage)
+class Crush {
+  const Crush({
+    required this.id,
+    required this.nickname,
+    required this.dDay,
+    required this.reason,
+    required this.intimacy,
+    required this.meetingsPerWeek,
+    required this.goal,
+    this.chatNames = const [],
+    this.archived = false,
+  });
+
+  /// 저장용 번호 (CrushStore가 붙임, 1부터)
+  final int id;
+
+  /// 앱에서 부르는 이름 (예: 지민)
+  final String nickname;
+
+  final DateTime dDay;
+
+  /// reasonTags 중 하나, 직접 입력했으면 그 글자 (예: '이사')
+  final String reason;
+  final Intimacy intimacy;
+
+  /// 주 0 ~ 7회
+  final int meetingsPerWeek;
+  final Goal goal;
+
+  /// 이 상대로 연결한 카톡 이름 (대화 분석에서 상대를 자동으로 고름)
+  final List<String> chatNames;
+
+  /// 보관했으면 true (지금 상대 목록 · 알림에서 빠지고 기록은 남음)
+  final bool archived;
+
+  /// 미션 흐름 · 데이트 가이드가 쓰는 입력값 (courage: 내 용기 배터리)
+  Profile toProfile(int courage) {
+    return Profile(
+      dDay: dDay,
+      reason: reason,
+      intimacy: intimacy,
+      meetingsPerWeek: meetingsPerWeek,
+      courage: courage,
+      goal: goal,
+    );
+  }
+
+  Crush copyWith({
+    String? nickname,
+    DateTime? dDay,
+    String? reason,
+    Intimacy? intimacy,
+    int? meetingsPerWeek,
+    Goal? goal,
+    List<String>? chatNames,
+    bool? archived,
+  }) {
+    return Crush(
+      id: id,
+      nickname: nickname ?? this.nickname,
+      dDay: dDay ?? this.dDay,
+      reason: reason ?? this.reason,
+      intimacy: intimacy ?? this.intimacy,
+      meetingsPerWeek: meetingsPerWeek ?? this.meetingsPerWeek,
+      goal: goal ?? this.goal,
+      chatNames: chatNames ?? this.chatNames,
+      archived: archived ?? this.archived,
+    );
+  }
+}
+
+/// 오늘부터 날짜까지 남은 날 (시간 무시, 날짜만 비교)
+int daysUntil(DateTime day, {DateTime? now}) {
+  final t = now ?? DateTime.now();
+  return DateTime.utc(day.year, day.month, day.day)
+      .difference(DateTime.utc(t.year, t.month, t.day))
+      .inDays;
 }

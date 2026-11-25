@@ -419,6 +419,16 @@ void main() {
         // 전체 수를 모르면 첫 대화인지 안 봄
         expect(inferOf(sharing).strategy, Approach.react.label);
       });
+
+      test('다른 추천 보기: 같은 방향, 앞 멘트와 다른 멘트', () {
+        final insight = inferOf(sharing, totalMessages: 100);
+        expect(insight.linesAt(0), insight.lines);
+        final next = insight.linesAt(1, now: t(20, 14, 0));
+        expect(next.length, insight.lines.length);
+        expect(next, isNot(insight.lines));
+        // 첫 줄은 여전히 자주 나온 주제(맛집 · 음식) 멘트
+        expect(textsOf(topicLines[Topic.food]!.ask), contains(next.first));
+      });
     });
   });
 
