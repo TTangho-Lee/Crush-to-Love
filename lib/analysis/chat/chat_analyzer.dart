@@ -7,6 +7,8 @@ import 'chat_stats.dart';
 import 'history/chat_record.dart';
 import 'rules/features.dart';
 import 'rules/inference.dart';
+import 'rules/normalizer.dart';
+import 'rules/tone.dart';
 
 export 'chat_parser.dart';
 
@@ -104,7 +106,13 @@ ChatStats analyzeParsed(
   // 첫 대화인지는 분석 기간 말고 읽어 온 대화 전체로 봄
   final total =
       messages.where((m) => m.sender == me || m.sender == partner).length;
-  final insight = infer(features, now: at, totalMessages: total);
+  // 내 말투(웃음 표현)도 분석 기간 말고 읽어 온 대화 전체의 내 메시지로 봄
+  final tone = toneOf([
+    for (final m in messages)
+      if (m.sender == me && !isPlaceholder(m.text)) m.text,
+  ]);
+  final insight =
+      infer(features, now: at, totalMessages: total, tone: tone);
   final them = features.them;
   final reply = them.replyMedianMinutes?.round();
 

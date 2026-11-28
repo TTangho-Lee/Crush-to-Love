@@ -1,5 +1,5 @@
 // 짝사랑 상대 목록 테스트 (flutter test test/crush_store_test.dart)
-// 저장은 메모리 저장소로 (실제 DB 없이), 추가 · 전환 · 보관 · 지우기 · 카톡 이름 연결 · 분석한 대화 따라 바꾸기 · 기록 묶기 확인
+// 저장은 메모리 저장소로 (실제 DB 없이), 추가 · 전환 · 보관 · 지우기 · 카톡 이름 연결 · 분석한 대화 따라 바꾸기 · 결과 · 기록 묶기 확인
 import 'package:flutter_test/flutter_test.dart';
 import 'package:one_way_love/analysis/chat/history/chat_record.dart';
 import 'package:one_way_love/analysis/chat/history/history_screen.dart';
@@ -144,6 +144,8 @@ void main() {
     final jimin = await addCrush(store, '지민', courage: 80);
     await store.linkChatName(jimin.id, '김지민');
     await store.skipChatName('단톡방 친구');
+    await store.setLaughStyle(LaughStyle.none);
+    await store.update(store.current!.copyWith(speech: SpeechLevel.formal));
 
     final again = CrushStore(storage: storage);
     await again.load();
@@ -151,10 +153,36 @@ void main() {
     expect(again.current?.chatNames, ['김지민']);
     expect(again.courage, 80);
     expect(again.isSkipped('단톡방 친구'), isTrue);
+    expect(again.laughStyle, LaughStyle.none);
+    expect(again.current?.speech, SpeechLevel.formal);
 
     await again.clearAll();
     expect(again.current, isNull);
     expect(storage.saved, isNull);
+  });
+
+  test('D-Day가 지나고 결과를 안 골랐으면 물어볼 상대, 고르면 저장', () async {
+    final storage = MemoryStorage();
+    final store = CrushStore(storage: storage);
+    final jimin = await addCrush(store, '지민');
+    final today = DateTime.now();
+    await store.update(
+      jimin.copyWith(dDay: DateTime(today.year, today.month, today.day + 10)),
+    );
+    expect(store.awaitingOutcome, isNull); // 아직 D-Day 전
+
+    await store.update(
+      store.current!.copyWith(
+        dDay: DateTime(today.year, today.month, today.day - 2),
+      ),
+    );
+    expect(store.awaitingOutcome?.id, jimin.id);
+
+    await store.setOutcome(jimin.id, CrushOutcome.fail);
+    expect(store.awaitingOutcome, isNull);
+    final again = CrushStore(storage: storage);
+    await again.load();
+    expect(again.current?.outcome, CrushOutcome.fail);
   });
 
   test('사유 태그: 직접 입력한 사유는 기타로 표시', () {

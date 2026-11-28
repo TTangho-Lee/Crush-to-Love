@@ -2,11 +2,13 @@
 //   지금 사이: 온보딩 · 11번과 같은 3단계(Intimacy) 중 하나로 추정 + 이유
 //   다음 대화 방향: 먼저 지금 상황(오랜만 · 만난 뒤 · 첫 대화)을 보고, 아니면 _rules에서 처음 맞는 것 하나
 //   설명 · 예시 멘트: lines.dart의 멘트 사전에서 (주제 · 시간대 · 존댓말 사이 반영)
+//   예시 멘트 웃음(ㅋㅋ · ㅎㅎ)은 내 말투에 맞춰 화면에 낼 때 입힘 (linesAt, tone.dart)
 import '../../../shared/models.dart';
 import 'features.dart';
 import 'lexicon.dart';
 import 'lines.dart';
 import 'scoring.dart';
+import 'tone.dart';
 import 'topics.dart';
 
 /// 대화 분석 해석 결과 (피그마 12번 아래쪽 카드)
@@ -23,6 +25,7 @@ class Insight {
     this.topic,
     this.formal = false,
     this.seed = 0,
+    this.tone = const Tone(),
   });
 
   /// 호감 신호 점수
@@ -40,7 +43,7 @@ class Insight {
   /// 다음 대화 방향 설명
   final String hint;
 
-  /// 예시 멘트 (최대 3개)
+  /// 예시 멘트 (최대 3개), 사전 문장 그대로 (화면에는 linesAt으로 말투를 입혀서)
   final List<String> lines;
 
   /// 대화에 자주 나온 주제 이름 (예: '맛집·음식'), 최대 3개
@@ -58,19 +61,32 @@ class Insight {
   /// 멘트를 고를 때 쓴 seed
   final int seed;
 
-  /// '다른 추천 보기' round번째 멘트 (0이면 처음 멘트, 방향을 모르면 처음 멘트 그대로)
+  /// 대화 속 내 말투 (웃음 표현)
+  final Tone tone;
+
+  /// '다른 추천 보기' round번째 멘트에 말투를 입혀서 (0이면 처음 멘트, 방향을 모르면 처음 멘트 그대로)
   /// 한 번에 lines 개수만큼 건너뛰어서 앞 멘트와 겹치지 않게
-  List<String> linesAt(int round, {DateTime? now}) {
+  /// formal · tone: 설정에서 고른 말 높이 · 웃음 표현 (비우면 대화에서 본 값)
+  List<String> linesAt(
+    int round, {
+    DateTime? now,
+    bool? formal,
+    Tone? tone,
+  }) {
     final approach = this.approach;
-    if (round == 0 || approach == null || lines.isEmpty) return lines;
-    return pickLines(
-      approach,
-      now: now ?? DateTime.now(),
-      seed: seed + round * lines.length,
-      topic: topic,
-      formal: formal,
-      count: lines.length,
-    );
+    final useFormal = formal ?? this.formal;
+    final same = round == 0 && useFormal == this.formal;
+    final picked = same || approach == null || lines.isEmpty
+        ? lines
+        : pickLines(
+            approach,
+            now: now ?? DateTime.now(),
+            seed: seed + round * lines.length,
+            topic: topic,
+            formal: useFormal,
+            count: lines.length,
+          );
+    return applyTone(picked, tone ?? this.tone, seed: seed + round);
   }
 }
 
@@ -82,7 +98,13 @@ const firstTalkMessages = 15;
 
 /// now: 시간대 · 요일에 맞는 멘트 고르기 · 오랜만인지 보기 (기본은 지금)
 /// totalMessages: 분석 기간과 상관없이 나와 상대가 주고받은 메시지 수 (비우면 첫 대화인지 안 봄)
-Insight infer(ConversationFeatures f, {DateTime? now, int? totalMessages}) {
+/// tone: 대화 속 내 말투 (비우면 멘트 그대로, 테스트용)
+Insight infer(
+  ConversationFeatures f, {
+  DateTime? now,
+  int? totalMessages,
+  Tone tone = Tone.keep,
+}) {
   final at = now ?? DateTime.now();
   final interest = scoreInterest(f);
   final (intimacy, reason) = _estimateIntimacy(f, interest);
@@ -109,6 +131,7 @@ Insight infer(ConversationFeatures f, {DateTime? now, int? totalMessages}) {
     topic: topic,
     formal: formal,
     seed: seed,
+    tone: tone,
   );
 }
 

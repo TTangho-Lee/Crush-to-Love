@@ -1,22 +1,25 @@
 // 설정 (머리글 '지민 ▾' 목록의 '설정', 하단 탭 없이 전체 화면, 오른쪽 위 되돌아가기)
-//   지금 상대: 별명 · D-Day · 사유 · 지금 사이 · 만남 빈도 · 목표 고치기, 연결한 카톡 이름 끊기
+//   지금 상대: 별명 · D-Day · 사유 · 지금 사이 · 만남 빈도 · 목표 · 말 높이 · 결과(피그마 17번) 고치기, 연결한 카톡 이름 끊기
 //     고르는 창은 골라 두고 '확인'을 눌러야 저장 (_choose)
-//   나: 용기 배터리 (손을 떼면 저장)
+//   나: 용기 배터리 (손을 떼면 저장), 예시 멘트 웃음 표현 (analysis/chat/rules/tone.dart)
 //   상대 관리: 라디오 버튼으로 골라 두고 '확인'으로 지금 상대 바꾸기 (_CrushList)
 //     보관 · 지우기는 한 번 더 묻고, 꺼내기, 새 상대 (상대가 한 명뿐이면 보관 · 지우기 안 됨)
-//   기록: 분석 기록 모아보기
+//   기록: 분석 기록 모아보기 · 학습한 내용 (맞춤 추천 켜기/끄기 · 학습 기록 지우기, learning_screen.dart)
 import 'package:material_ui/material_ui.dart';
 
 import '../analysis/chat/chat_store.dart';
 import '../analysis/chat/history/chat_history_db.dart';
 import '../analysis/chat/history/history_screen.dart';
+import '../learning/learning_store.dart';
 import '../onboarding/data/crush_store.dart';
+import '../outcome/outcome_screen.dart';
 import '../shared/app_colors.dart';
 import '../shared/models.dart';
 import '../shared/widgets/app_header.dart';
 import '../shared/widgets/panel_card.dart';
 import '../shared/widgets/primary_button.dart';
 import 'crush_switcher.dart';
+import 'learning_screen.dart';
 
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
@@ -89,24 +92,64 @@ class SettingsScreen extends StatelessWidget {
                         onPicked: (v) => current.copyWith(goal: v),
                       ),
                     ),
+                    _Row(
+                      title: '말 높이',
+                      value: current.speech.label,
+                      onTap: () => _pick<SpeechLevel>(
+                        context,
+                        title: '예시 멘트를 어떤 말로 할까요?',
+                        options: [for (final v in SpeechLevel.values) (v, v.label)],
+                        selected: current.speech,
+                        onPicked: (v) => current.copyWith(speech: v),
+                      ),
+                    ),
+                    _Row(
+                      title: '결과',
+                      value: current.outcome?.label ?? '아직',
+                      onTap: () => showOutcome(context, current),
+                    ),
                     _ChatNames(crush: current),
                   ],
                 ),
               ),
             ],
             const _SectionTitle('나'),
-            PanelCard(child: _CourageEditor(courage: crushes.courage)),
+            PanelCard(
+              child: Column(
+                children: [
+                  _CourageEditor(courage: crushes.courage),
+                  const SizedBox(height: 8),
+                  _Row(
+                    title: '웃음 표현',
+                    value: crushes.laughStyle.label,
+                    onTap: () => _editLaugh(context, crushes.laughStyle),
+                  ),
+                ],
+              ),
+            ),
             const _SectionTitle('상대 관리'),
             const PanelCard(child: _CrushList()),
             const _SectionTitle('기록'),
             PanelCard(
-              child: _Row(
-                title: '분석 기록 모아보기',
-                value: '상대별 호감 신호 점수 변화',
-                onTap: () => Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (_) => const HistoryScreen()),
-                ),
+              child: Column(
+                children: [
+                  _Row(
+                    title: '분석 기록 모아보기',
+                    value: '상대별 호감 신호 점수 변화',
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => const HistoryScreen()),
+                    ),
+                  ),
+                  _Row(
+                    title: '학습한 내용',
+                    value: _learningSummary(LearningScope.maybeOf(context)),
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => const LearningScreen()),
+                    ),
+                  ),
+                ],
               ),
             ),
           ],
@@ -166,7 +209,19 @@ class SettingsScreen extends StatelessWidget {
     await CrushScope.of(context).update(crush.copyWith(reason: reason));
   }
 
-  /// 목록에서 하나 고르기 (지금 사이 · 만남 빈도 · 목표), '확인'을 누르면 onPicked로 만든 상대로 저장
+  /// 예시 멘트 웃음 표현 고르기 (나에 대한 값)
+  Future<void> _editLaugh(BuildContext context, LaughStyle selected) async {
+    final picked = await _choose<LaughStyle>(
+      context,
+      title: '예시 멘트에 웃음을 넣을까요?',
+      options: [for (final v in LaughStyle.values) (v, v.label)],
+      selected: selected,
+    );
+    if (picked == null || !context.mounted) return;
+    await CrushScope.of(context).setLaughStyle(picked.$1);
+  }
+
+  /// 목록에서 하나 고르기 (지금 사이 · 만남 빈도 · 목표 · 말 높이), '확인'을 누르면 onPicked로 만든 상대로 저장
   Future<void> _pick<T>(
     BuildContext context, {
     required String title,
@@ -532,6 +587,11 @@ class _SmallButton extends StatelessWidget {
     );
   }
 }
+
+/// '기록 12개 · 켬', 학습이 없으면 null
+String? _learningSummary(LearningStore? learning) => learning == null
+    ? null
+    : '기록 ${learning.events().length}개 · ${learning.enabled ? '켬' : '끔'}';
 
 String _date(DateTime d) =>
     '${d.year}. ${d.month.toString().padLeft(2, '0')}. '

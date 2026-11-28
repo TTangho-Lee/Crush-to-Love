@@ -3,7 +3,9 @@
 // 위에서부터 결론 → 근거 → 할 일 → 자세한 숫자 순서
 //   호감 신호: 점수 + 막대 + 점수를 올리고 내린 근거 (rules/scoring.dart)
 //   다음 대화: 추천 방향 + 자주 나온 이야기 + 예시 멘트 3개 (누르면 복사, 복사 아이콘으로만 표시)
+//     멘트 웃음(ㅋㅋ · ㅎㅎ) · 말 높이는 내 말투에 맞춤, 설정에서 고르면 그 값 (rules/tone.dart)
 //     '↻ 다른 추천 보기': 같은 방향으로 다른 멘트, 약속 방향이면 '데이트 준비하기 →' (주제에 맞는 장소를 미리 고름)
+//     맞춤 추천을 켜면 멘트 순서를 학습 순서로 (line_learning.dart, 이 화면이 열려 있는 동안 고정), 복사하면 기록
 //   지금 사이: 대화로 본 친밀도 + 홈에서 관계 업데이트
 //   대화 숫자: 4칸, 누르면 아래에 설명 (ⓘ 아이콘으로만 표시, rules/features.dart 값)
 //   달라진 점: 분석 기간 안 변화 + 지난 분석과 비교 (history 폴더)
@@ -15,13 +17,14 @@ import 'package:material_ui/material_ui.dart';
 
 import '../../app/crush_switcher.dart';
 import '../../app/main_shell.dart';
+import '../../learning/learning_store.dart';
 import '../../onboarding/data/crush_store.dart';
 import '../../shared/app_colors.dart';
+import '../../shared/models.dart';
 import '../../shared/widgets/app_header.dart';
 import '../../shared/widgets/copy_bubble.dart';
 import '../../shared/widgets/primary_button.dart';
 import '../../shared/widgets/progress_bar.dart';
-import '../../shared/widgets/secondary_button.dart';
 import '../date/date_guide_rules.dart';
 import '../date/date_store.dart';
 import 'chat_analyzer.dart';
@@ -29,9 +32,12 @@ import 'chat_stats.dart';
 import 'chat_store.dart';
 import 'history/chat_record.dart';
 import 'history/history_screen.dart';
+import 'line_learning.dart';
 import 'rules/inference.dart';
+import 'rules/lexicon.dart';
 import 'rules/lines.dart';
 import 'rules/scoring.dart';
+import 'rules/tone.dart';
 
 class ConversationResultScreen extends StatelessWidget {
   const ConversationResultScreen({super.key});
@@ -61,7 +67,11 @@ class ConversationResultScreen extends StatelessWidget {
           padding: const EdgeInsets.fromLTRB(24, 16, 24, 24),
           children: [
             // 예시 결과일 때만 오른쪽에 '예시'
-            AppHeader(label: stats.isExample ? '예시' : null),
+            // 오른쪽 위 되돌아가기 → 9번 (입력한 대화는 그대로)
+            AppHeader(
+              label: stats.isExample ? '예시' : null,
+              onBack: () => Navigator.pop(context),
+            ),
             const SizedBox(height: 24),
             Text(stats.summary, style: text.headlineSmall),
             const SizedBox(height: 6),
@@ -89,12 +99,7 @@ class ConversationResultScreen extends StatelessWidget {
                 ),
               ],
             ),
-            const SizedBox(height: 16),
-            SecondaryButton(
-              label: '대화 다시 입력하기',
-              // 피그마 9번으로 돌아가기 (입력한 대화는 그대로 남아 있음)
-              onPressed: () => Navigator.pop(context),
-            ),
+            const SizedBox(height: 8),
             Center(
               child: TextButton(
                 // 하단 탭 없이 전체 화면
@@ -394,6 +399,60 @@ class _NextTalkCardState extends State<_NextTalkCard> {
   /// '다른 추천 보기'를 누른 횟수
   int _round = 0;
 
+  /// 학습 순서 (맞춤 추천을 켰을 때만, 말 높이가 바뀌면 다시)
+  LineDeck? _deck;
+  bool? _deckFormal;
+
+  /// 이번 화면에서 복사해서 기록한 멘트 (화면마다 한 번)
+  final Set<String> _copied = {};
+
+  /// 학습 순서 멘트 (사전 문장, 말투 입힌 글자), 학습을 안 쓰면 null
+  List<(DeckLine, String)>? _learnedLines(
+    LearningStore? learning, {
+    required bool formal,
+    required Tone tone,
+  }) {
+    final insight = widget.insight;
+    final approach = insight.approach;
+    final stats = ChatScope.of(context).stats;
+    if (learning == null ||
+        !learning.enabled ||
+        approach == null ||
+        stats.isExample) {
+      return null;
+    }
+    if (_deck == null || _deckFormal != formal) {
+      _deck = LineDeck.build(
+        learning,
+        approach: approach,
+        seed: insight.seed,
+        now: DateTime.now(),
+        topic: insight.topic,
+        formal: formal,
+        interest: insight.interest.level.name,
+        shortRate: stats.features?.them.rate(MessageTag.shortReply) ?? 0,
+      );
+      _deckFormal = formal;
+    }
+    final shown = _deck!.round(_round);
+    final toned = applyToneEach(
+      [for (final l in shown) l.text],
+      tone,
+      seed: insight.seed + _round,
+    );
+    return [
+      for (var i = 0; i < shown.length; i++)
+        if (toned[i].isNotEmpty) (shown[i], toned[i]),
+    ];
+  }
+
+  /// 복사한 멘트 기록 (화면마다 한 줄에 한 번)
+  void _onCopied(LearningStore learning, DeckLine line, int crushId) {
+    final deck = _deck;
+    if (deck == null || !_copied.add(line.text)) return;
+    recordCopy(learning, deck, line, crushId: crushId);
+  }
+
   /// 데이트 탭으로, 자주 나온 주제에 맞는 장소가 있으면 미리 고름
   void _openDate() {
     final topic = widget.insight.topic;
@@ -409,7 +468,20 @@ class _NextTalkCardState extends State<_NextTalkCard> {
   Widget build(BuildContext context) {
     final text = Theme.of(context).textTheme;
     final insight = widget.insight;
-    final lines = insight.linesAt(_round);
+    // 설정에서 고른 이 대화 상대의 말 높이 · 내 웃음 표현 (대화에 맞춤이면 대화 기준)
+    final crushes = CrushScope.maybeOf(context);
+    final partner = ChatScope.of(context).stats.record?.partner;
+    final crush = crushes == null || partner == null
+        ? null
+        : crushes.crushForChatName(partner) ??
+            (crushes.chatBelongsToCurrent(partner) ? crushes.current : null);
+    final formal = crush?.speech.formalOr(insight.formal) ?? insight.formal;
+    final tone = insight.tone.withStyle(crushes?.laughStyle ?? LaughStyle.auto);
+    final learning = LearningScope.maybeOf(context);
+    final learned = _learnedLines(learning, formal: formal, tone: tone);
+    final lines = learned == null
+        ? insight.linesAt(_round, formal: formal, tone: tone)
+        : [for (final (_, text) in learned) text];
     final canShuffle = insight.approach != null && lines.isNotEmpty;
     final toDate = _toDateApproaches.contains(insight.approach);
 
@@ -445,7 +517,17 @@ class _NextTalkCardState extends State<_NextTalkCard> {
             const SizedBox(height: 8),
             Column(
               spacing: 8,
-              children: [for (final line in lines) CopyBubble(line)],
+              children: [
+                if (learned != null && learning != null)
+                  for (final (raw, text) in learned)
+                    CopyBubble(
+                      text,
+                      onCopied: () =>
+                          _onCopied(learning, raw, crush?.id ?? 0),
+                    )
+                else
+                  for (final line in lines) CopyBubble(line),
+              ],
             ),
           ],
           if (canShuffle || toDate) ...[
@@ -454,7 +536,10 @@ class _NextTalkCardState extends State<_NextTalkCard> {
               children: [
                 if (canShuffle)
                   TextButton(
-                    onPressed: () => setState(() => _round++),
+                    onPressed: () => setState(() {
+                      _round++;
+                      _copied.clear();
+                    }),
                     style: buttonStyle,
                     child: const Text('↻ 다른 추천 보기'),
                   ),
