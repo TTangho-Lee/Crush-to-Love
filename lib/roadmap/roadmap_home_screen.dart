@@ -2,10 +2,10 @@
 //   맨 위 한 줄 진단 (roadmap_rules.dart summaryOf)
 //   목표 카드: 사유 D-n · 목표 진척도 % · 주차별 막대 · 진도 · 용기 단계 · '업데이트 ›'(11번)
 //   미션 카드 하나 (_MissionPanel): 주차 제목 · n/m (누르면 주차 상세 14~16번)
-//     맨 위 큰 상세 칸: 처음엔 오늘의 미션(규칙 · 맞춤 추천으로 고른 한 개, ↻로 바꾸기)
-//       고른 이유(학습에서 나온 이유면 아이콘이 다름), 완료 · 취소는 이 칸의 버튼으로만
-//     아래 한 줄 목록: 용기에 맞는 것 → 용기 보너스(어려운 것) → 다 한 것 순, 같은 칸 안에선 규칙 · 학습 순서
-//       줄을 누르면 그 미션이 위 상세 칸으로 열림 (⇕ 아이콘으로 암시), 연 미션은 목록에서 빠짐
+//     주차 미션을 순서 그대로 위아래로, 한 번에 하나만 펼침 (아코디언, ⌄ · ⌃ 아이콘으로 암시)
+//       처음엔 오늘의 미션(규칙 · 맞춤 추천으로 고른 한 개)이 펼쳐짐, 다른 줄을 누르면 그게 펼쳐지고 나머지는 접힘
+//       펼친 칸: 용기 ●●○ · 방법 · 팁 · 고른 이유(학습에서 나온 이유면 아이콘이 다름) · ↻(오늘의 미션만)
+//       체크 칸을 누르면 완료 · 취소, 줄 나머지를 누르면 펼치기 · 접기
 //     이번 주를 다 했으면 이번 주는 한 줄로 접고 다음 주 미션을 미리
 //   D-Day가 지났으면 결과 입력(17번), 다 했으면 축하 카드
 import 'package:material_ui/material_ui.dart';
@@ -17,7 +17,6 @@ import '../shared/models.dart';
 import '../shared/widgets/app_header.dart';
 import '../shared/widgets/check_mark.dart';
 import '../shared/widgets/primary_button.dart';
-import '../shared/widgets/secondary_button.dart';
 import 'roadmap_generator.dart';
 import 'roadmap_models.dart';
 import 'roadmap_rules.dart';
@@ -144,7 +143,7 @@ class _GoalCard extends StatelessWidget {
                   ),
                 ),
                 Text(
-                  '${(s.progress * 100).round()}%',
+                  '${(s.goalProgress * 100).round()}%',
                   style: const TextStyle(
                     fontSize: 28,
                     height: 1,
@@ -158,7 +157,11 @@ class _GoalCard extends StatelessWidget {
           const SizedBox(height: 12),
           Padding(
             padding: const EdgeInsets.only(right: 8),
-            child: SegmentBar(weeks: s.roadmap.weeks, currentIndex: s.weekIndex),
+            child: SegmentBar(
+              weeks: s.roadmap.weeks,
+              currentIndex: s.weekIndex,
+              start: s.start,
+            ),
           ),
           const SizedBox(height: 10),
           Row(
@@ -193,114 +196,6 @@ class _GoalCard extends StatelessWidget {
               ),
             ],
           ),
-        ],
-      ),
-    );
-  }
-}
-
-/// 큰 상세 칸: '오늘' · 용기 ●●○ · 방법 · 제목 · 팁 · 고른 이유 · '했어요' (다 했으면 '완료 취소')
-class _DetailCard extends StatelessWidget {
-  const _DetailCard({
-    required this.mission,
-    required this.brave,
-    required this.onToggle,
-    this.reason,
-    this.learned = false,
-    this.today = false,
-    this.onRotate,
-  });
-
-  final RoadmapMission mission;
-
-  /// 지금 용기보다 어려운 미션 ('용기 보너스 ×1.5')
-  final bool brave;
-
-  /// 완료 · 취소
-  final VoidCallback onToggle;
-
-  /// 고른 이유 한 줄 (다 한 미션이면 null)
-  final String? reason;
-
-  /// 이유가 학습에서 나왔으면 true (아이콘이 다름)
-  final bool learned;
-
-  /// 오늘의 미션이면 true ('오늘' 표시)
-  final bool today;
-
-  /// 다른 미션으로 바꾸기 (오늘의 미션이고 바꿀 게 있을 때만, 아니면 ↻ 숨김)
-  final VoidCallback? onRotate;
-
-  @override
-  Widget build(BuildContext context) {
-    final text = Theme.of(context).textTheme;
-    final m = mission;
-    final reason = this.reason;
-
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        color: m.done ? AppColors.roseSoft : AppColors.warmWhite,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.border),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              if (today) ...[
-                const Pill(
-                  icon: Icons.auto_awesome,
-                  label: '오늘',
-                  color: AppColors.blush,
-                ),
-                const SizedBox(width: 6),
-              ],
-              Expanded(child: MissionMeta(mission: m, brave: brave)),
-              if (onRotate != null)
-                IconButton(
-                  onPressed: onRotate,
-                  icon: const Icon(Icons.refresh, size: 18),
-                  color: AppColors.warmGray,
-                  visualDensity: VisualDensity.compact,
-                  tooltip: '다른 미션',
-                ),
-            ],
-          ),
-          const SizedBox(height: 10),
-          Text(m.title, style: text.titleMedium),
-          const SizedBox(height: 4),
-          Text(m.tip, style: text.bodySmall),
-          if (reason != null) ...[
-            const SizedBox(height: 14),
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-              decoration: BoxDecoration(
-                color: AppColors.ivory,
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // 학습에서 나온 이유면 다른 아이콘
-                  Icon(
-                    learned ? Icons.insights : Icons.auto_awesome,
-                    size: 13,
-                    color: AppColors.peach,
-                  ),
-                  const SizedBox(width: 6),
-                  Expanded(child: Text(reason, style: text.bodySmall)),
-                ],
-              ),
-            ),
-          ],
-          const SizedBox(height: 14),
-          m.done
-              ? SecondaryButton(label: '완료 취소', onPressed: onToggle)
-              : PrimaryButton(label: '했어요 ✓', onPressed: onToggle),
         ],
       ),
     );
@@ -350,7 +245,7 @@ class _NoticeCard extends StatelessWidget {
   }
 }
 
-/// 미션 카드 하나: 주차 제목 줄 · 큰 상세 칸 · 한 줄 목록
+/// 미션 카드 하나: 주차 제목 줄 · 미션 아코디언 (한 번에 하나만 펼침)
 /// 이번 주를 다 해서 다음 주를 미리 하면 이번 주는 한 줄(✓)로 접고 다음 주를 보여 줌
 class _MissionPanel extends StatefulWidget {
   const _MissionPanel({
@@ -373,17 +268,23 @@ class _MissionPanel extends StatefulWidget {
 }
 
 class _MissionPanelState extends State<_MissionPanel> {
-  /// 목록에서 눌러 연 미션 (null이면 오늘의 미션)
+  /// 직접 고른 펼칠 미션 (null이면 다 접음), _chosen이 false면 오늘의 미션을 펼침
   String? _openId;
+  bool _chosen = false;
 
-  void _toggle(RoadmapMission m) {
-    // 끝낸 미션은 닫고 다음 오늘의 미션으로, 취소는 그대로 열어 둠
-    if (!m.done) setState(() => _openId = null);
+  void _tap(String id, String? openNow) => setState(() {
+        _chosen = true;
+        _openId = openNow == id ? null : id;
+      });
+
+  void _toggle(RoadmapMission m, String? openId) {
+    // 펼친 미션을 끝내면 다음 오늘의 미션을 펼침
+    if (!m.done && m.id == openId) setState(() => _chosen = false);
     widget.store.toggleMission(m.id);
   }
 
   void _rotate() {
-    setState(() => _openId = null);
+    setState(() => _chosen = false);
     widget.store.rotateToday();
   }
 
@@ -394,31 +295,10 @@ class _MissionPanelState extends State<_MissionPanel> {
     final early = pick != null && pick.early;
     final shown = pick != null && pick.early ? pick.week : widget.week;
     final maxLevel = courageMax(store.situation.profile.courage);
+    final openId = _chosen ? _openId : pick?.mission.id;
 
-    // 연 미션: 누른 것이 이 주차에 있으면 그것, 아니면 오늘의 미션
-    final byId = {for (final m in shown.missions) m.id: m};
-    final open = byId[_openId] ?? pick?.mission;
-    final today = open != null && open.id == pick?.mission.id ? pick : null;
-
-    // 고른 이유 · 순서 (규칙 · 학습)
-    final ranked = store.ranked;
-    final rankOf = {
-      for (var i = 0; i < ranked.length; i++) ranked[i].mission.id: i,
-    };
-    final reasonOf = {for (final p in ranked) p.mission.id: p.reason};
-
-    // 용기에 맞는 것 → 어려운 것 → 다 한 것, 같은 칸 안에선 규칙 · 학습 순서 (없으면 사전 순서)
-    int tier(RoadmapMission m) => m.done ? 2 : (m.level > maxLevel ? 1 : 0);
-    final rows = [
-      for (final (i, m) in shown.missions.indexed)
-        if (m.id != open?.id) (i, m),
-    ]..sort((a, b) {
-        final byTier = tier(a.$2).compareTo(tier(b.$2));
-        if (byTier != 0) return byTier;
-        final ra = rankOf[a.$2.id] ?? 1000 + a.$1;
-        final rb = rankOf[b.$2.id] ?? 1000 + b.$1;
-        return ra.compareTo(rb);
-      });
+    // 고른 이유 (규칙 · 학습)
+    final reasonOf = {for (final p in store.ranked) p.mission.id: p.reason};
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -429,31 +309,222 @@ class _MissionPanelState extends State<_MissionPanel> {
         ],
         _WeekTitle(week: shown, early: early),
         const SizedBox(height: 10),
-        if (open != null) ...[
-          _DetailCard(
-            mission: open,
-            brave: open.level > maxLevel,
-            reason: today?.reason ?? (open.done ? null : reasonOf[open.id]),
-            learned: today?.learned ?? false,
-            today: today != null,
-            onRotate: today != null && store.canRotate ? _rotate : null,
-            onToggle: () => _toggle(open),
-          ),
-          const SizedBox(height: 8),
-        ],
         Column(
           spacing: 8,
           children: [
-            for (final (_, m) in rows)
-              _CheckRow(
-                mission: m,
-                today: m.id == pick?.mission.id,
-                brave: !m.done && m.level > maxLevel,
-                onTap: () => setState(() => _openId = m.id),
-              ),
+            for (final m in shown.missions)
+              if (pick != null && m.id == pick.mission.id)
+                _MissionItem(
+                  mission: m,
+                  open: m.id == openId,
+                  today: true,
+                  brave: pick.brave,
+                  reason: pick.reason,
+                  learned: pick.learned,
+                  onTap: () => _tap(m.id, openId),
+                  onToggle: () => _toggle(m, openId),
+                  onRotate: store.canRotate ? _rotate : null,
+                )
+              else
+                _MissionItem(
+                  mission: m,
+                  open: m.id == openId,
+                  brave: !m.done && m.level > maxLevel,
+                  reason: m.done ? null : reasonOf[m.id],
+                  onTap: () => _tap(m.id, openId),
+                  onToggle: () => _toggle(m, openId),
+                ),
           ],
         ),
       ],
+    );
+  }
+}
+
+/// 미션 한 칸: 체크(누르면 완료 · 취소) · 이름 · ✦/⚡ · 용기 ●●○ · ⌄
+/// 펼치면 그 아래 방법 · 팁 · 고른 이유, 맨 윗줄을 누르면 접힘(⌃)
+class _MissionItem extends StatelessWidget {
+  const _MissionItem({
+    required this.mission,
+    required this.open,
+    required this.onTap,
+    required this.onToggle,
+    this.today = false,
+    this.brave = false,
+    this.reason,
+    this.learned = false,
+    this.onRotate,
+  });
+
+  final RoadmapMission mission;
+  final bool open;
+
+  /// 줄 누름 (펼치기 · 접기)
+  final VoidCallback onTap;
+
+  /// 완료 · 취소 (체크 칸)
+  final VoidCallback onToggle;
+
+  /// 오늘의 미션이면 true (✦ · '오늘')
+  final bool today;
+
+  /// 지금 용기보다 어려운 미션 (⚡ · '용기 보너스 ×1.5')
+  final bool brave;
+
+  /// 고른 이유 한 줄 (다 한 미션 · 이유 없음이면 null)
+  final String? reason;
+
+  /// 이유가 학습에서 나왔으면 true (아이콘이 다름)
+  final bool learned;
+
+  /// 다른 미션으로 바꾸기 (오늘의 미션이고 바꿀 게 있을 때만)
+  final VoidCallback? onRotate;
+
+  @override
+  Widget build(BuildContext context) {
+    final text = Theme.of(context).textTheme;
+    final m = mission;
+    final done = m.done;
+    final reason = this.reason;
+
+    final head = GestureDetector(
+      onTap: onTap,
+      behavior: HitTestBehavior.opaque,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(6, 6, 8, 6),
+        child: Row(
+          children: [
+            // 체크 칸만 완료 · 취소 (누르기 쉽게 둘레까지), 나머지는 펼치기 · 접기
+            GestureDetector(
+              onTap: onToggle,
+              behavior: HitTestBehavior.opaque,
+              child: Padding(
+                padding: const EdgeInsets.all(6),
+                child: CheckMark(checked: done, size: 24),
+              ),
+            ),
+            const SizedBox(width: 6),
+            Expanded(
+              child: Text(
+                m.title,
+                maxLines: open ? 2 : 1,
+                overflow: TextOverflow.ellipsis,
+                style: (open ? text.titleSmall : text.bodyMedium)?.copyWith(
+                  color: done ? AppColors.warmGray : AppColors.charcoal,
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+            if (!open) ...[
+              if (today && !done)
+                const Padding(
+                  padding: EdgeInsets.only(right: 4),
+                  child: Icon(
+                    Icons.auto_awesome,
+                    size: 14,
+                    color: AppColors.peach,
+                  ),
+                ),
+              if (brave)
+                const Padding(
+                  padding: EdgeInsets.only(right: 4),
+                  child: Icon(Icons.bolt, size: 14, color: AppColors.peach),
+                ),
+              for (var i = 1; i <= 3; i++)
+                Padding(
+                  padding: const EdgeInsets.only(left: 2),
+                  child: Icon(
+                    i <= m.level ? Icons.circle : Icons.circle_outlined,
+                    size: 6,
+                    color: AppColors.warmGray,
+                  ),
+                ),
+              const SizedBox(width: 6),
+            ],
+            Icon(
+              open ? Icons.expand_less : Icons.expand_more,
+              size: 20,
+              color: AppColors.warmGray,
+            ),
+          ],
+        ),
+      ),
+    );
+
+    final body = Padding(
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              if (today && !done) ...[
+                const Pill(
+                  icon: Icons.auto_awesome,
+                  label: '오늘',
+                  color: AppColors.blush,
+                ),
+                const SizedBox(width: 6),
+              ],
+              Expanded(child: MissionMeta(mission: m, brave: brave)),
+              if (onRotate != null)
+                IconButton(
+                  onPressed: onRotate,
+                  icon: const Icon(Icons.refresh, size: 18),
+                  color: AppColors.warmGray,
+                  visualDensity: VisualDensity.compact,
+                  tooltip: '다른 미션',
+                ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(m.tip, style: text.bodySmall),
+          if (reason != null) ...[
+            const SizedBox(height: 12),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+              decoration: BoxDecoration(
+                color: AppColors.ivory,
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // 학습에서 나온 이유면 다른 아이콘
+                  Icon(
+                    learned ? Icons.insights : Icons.auto_awesome,
+                    size: 13,
+                    color: AppColors.peach,
+                  ),
+                  const SizedBox(width: 6),
+                  Expanded(child: Text(reason, style: text.bodySmall)),
+                ],
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 200),
+      decoration: BoxDecoration(
+        color: open
+            ? AppColors.warmWhite
+            : (done ? AppColors.roseSoft : AppColors.ivory),
+        borderRadius: BorderRadius.circular(open ? 16 : 12),
+        border: Border.all(color: open ? AppColors.border : Colors.transparent),
+      ),
+      child: AnimatedSize(
+        duration: const Duration(milliseconds: 200),
+        curve: Curves.easeOutCubic,
+        alignment: Alignment.topCenter,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [head, if (open) body],
+        ),
+      ),
     );
   }
 }
@@ -506,83 +577,6 @@ class _WeekTitle extends StatelessWidget {
               style: text.labelSmall,
             ),
             const Icon(Icons.chevron_right, size: 18, color: AppColors.warmGray),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-/// 한 줄 미션: 체크 표시(보기만) · 이름 · 용기 ●●○ · ⇕ (누르면 위 상세 칸으로 열림)
-/// 다 한 미션은 연분홍 바탕 · 흐린 글자, 오늘의 미션은 ✦, 어려운 미션은 ⚡
-class _CheckRow extends StatelessWidget {
-  const _CheckRow({
-    required this.mission,
-    required this.onTap,
-    this.today = false,
-    this.brave = false,
-  });
-
-  final RoadmapMission mission;
-  final VoidCallback onTap;
-  final bool today;
-  final bool brave;
-
-  @override
-  Widget build(BuildContext context) {
-    final text = Theme.of(context).textTheme;
-    final done = mission.done;
-
-    return GestureDetector(
-      onTap: onTap,
-      behavior: HitTestBehavior.opaque,
-      child: Container(
-        padding: const EdgeInsets.fromLTRB(12, 12, 8, 12),
-        decoration: BoxDecoration(
-          color: done ? AppColors.roseSoft : AppColors.ivory,
-          borderRadius: BorderRadius.circular(12),
-        ),
-        child: Row(
-          children: [
-            // 완료 · 취소는 위 상세 칸에서만, 여기선 표시만 (누르면 줄과 같이 열림)
-            CheckMark(checked: done, size: 24),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Text(
-                mission.title,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: text.bodyMedium?.copyWith(
-                  color: done ? AppColors.warmGray : AppColors.charcoal,
-                ),
-              ),
-            ),
-            const SizedBox(width: 8),
-            if (today && !done)
-              const Padding(
-                padding: EdgeInsets.only(right: 4),
-                child: Icon(
-                  Icons.auto_awesome,
-                  size: 14,
-                  color: AppColors.peach,
-                ),
-              ),
-            if (brave)
-              const Padding(
-                padding: EdgeInsets.only(right: 4),
-                child: Icon(Icons.bolt, size: 14, color: AppColors.peach),
-              ),
-            for (var i = 1; i <= 3; i++)
-              Padding(
-                padding: const EdgeInsets.only(left: 2),
-                child: Icon(
-                  i <= mission.level ? Icons.circle : Icons.circle_outlined,
-                  size: 6,
-                  color: AppColors.warmGray,
-                ),
-              ),
-            const SizedBox(width: 6),
-            const Icon(Icons.unfold_more, size: 18, color: AppColors.warmGray),
           ],
         ),
       ),

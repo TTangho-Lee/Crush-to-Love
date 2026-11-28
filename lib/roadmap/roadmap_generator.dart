@@ -7,7 +7,7 @@
 //     주차가 단계보다 많으면 단계마다 여러 주, 적으면 한 주에 최대 2단계씩만 건너뜀
 //     다음 주차부터는 shift만큼 당기거나 늦춤 (진도 · 대화 분석으로 자동 조정, roadmap_rules.dart)
 //   주차마다 미션 missionsPerWeek개
-//     만남 빈도가 주 0회면 만나야 하는 미션은 빼고, 용기 단계보다 어려운 미션은 모자랄 때만
+//     만남 빈도가 주 0회면 만나야 하는 미션은 빼고, 용기에 딱 맞는 것 → 한 단계 아래 → 더 쉬운 것 → 어려운 것 순 (어려운 건 모자랄 때만)
 //     같은 상대 · 같은 주차는 늘 같은 미션 (상대 번호 · 주차로 돌려 고름), 앞 주차와 안 겹치게, 사전 순서(쉬운 것 먼저)로
 //     orderFor를 주면 돌려 고르는 순서 대신 그 순서로 (학습 점수 순, roadmap_learning.dart)
 //       그때는 쉬운 미션(용기 최대보다 한 단계 아래, 저전력이면 용기 1)을 주차마다 최소 1개
@@ -31,7 +31,9 @@ const missionsPerWeek = 3;
 typedef RoadmapOrder = List<int> Function(RoadmapStage stage, int weekNo);
 
 /// 로드맵을 다시 짤지 볼 입력값 (만남 빈도는 0회인지만, 용기는 단계만)
+/// 맨 앞 v2: 미션 고르는 규칙이 바뀐 버전 (바뀌면 이번 주부터 다시 짬, 완료한 건 남김)
 String roadmapPlanKey(Profile profile) => [
+      'v2',
       _dateOnly(profile.dDay).toIso8601String(),
       profile.intimacy.name,
       profile.goal.name,
@@ -172,7 +174,7 @@ int currentWeekIndex(List<(int, int)> ranges, int daysLeft) {
 /// 주차별 단계 (자동 조정 전)
 List<RoadmapStage> stagesFor(Profile profile, int weekCount) {
   final end = goalStage(profile.goal).index;
-  final start = min(_startOf(profile.intimacy).index, end);
+  final start = min(startStageOf(profile.intimacy).index, end);
   final span = end - start + 1;
   return [
     for (var i = 0; i < weekCount; i++)
@@ -194,7 +196,8 @@ RoadmapStage goalStage(Goal goal) => switch (goal) {
       Goal.dating => RoadmapStage.confess,
     };
 
-RoadmapStage _startOf(Intimacy intimacy) => switch (intimacy) {
+/// 사이 → 로드맵 첫 단계
+RoadmapStage startStageOf(Intimacy intimacy) => switch (intimacy) {
       Intimacy.faceOnly => RoadmapStage.greet,
       Intimacy.smallTalk => RoadmapStage.topic,
       Intimacy.close => RoadmapStage.plan,
@@ -307,10 +310,16 @@ List<RoadmapMission> _pick(
       : [
           for (var i = 0; i < lines.length; i++) (i * 5 + seed) % lines.length,
         ];
-  // 먼저 용기에 맞고 안 쓴 것 → 용기 상관없이 안 쓴 것 → 앞 주차에 쓴 것
+  // 안 쓴 것 중 용기에 가까운 순 (딱 맞음 → 한 단계 아래 → … → 어려운 것) → 앞 주차에 쓴 것
+  // 풀충전인데 용기 1 미션이 먼저 들어가지 않게
+  int fit(int level) => level <= maxLevel ? maxLevel - level : 10 + level;
+  final fits = {
+    for (var i = 0; i < lines.length; i++) fit(lines[i].level),
+  }.toList()
+    ..sort();
   final tiers = <bool Function(int)>[
-    (i) => allowed(i) && lines[i].level <= maxLevel && !used.contains(idOf(i)),
-    (i) => allowed(i) && !used.contains(idOf(i)),
+    for (final f in fits)
+      (i) => allowed(i) && fit(lines[i].level) == f && !used.contains(idOf(i)),
     allowed,
   ];
 
