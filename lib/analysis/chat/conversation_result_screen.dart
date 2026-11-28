@@ -9,7 +9,7 @@
 //   지금 사이: 대화로 본 친밀도 + 홈에서 관계 업데이트
 //   대화 숫자: 4칸, 누르면 아래에 설명 (ⓘ 아이콘으로만 표시, rules/features.dart 값)
 //   달라진 점: 분석 기간 안 변화 + 지난 분석과 비교 (history 폴더)
-//   카톡 이름이 아직 어느 상대에도 연결 안 됐으면 맨 위에 '이 대화 상대는 누구예요?' (한 번 고르면 다음부터 안 물음)
+//   카톡 이름이 아직 어느 상대에도 연결 안 됐으면 맨 위에 '이 대화 상대는 누구예요?' (상대를 고르면 다음부터 안 물음, '분석만'은 이번 결과에서만 닫음)
 //     골라 두고 '확인'을 누르면 연결, 고른 상대가 지금 상대가 됨, 별명과 카톡 이름이 똑같으면 묻지 않고 연결 (CrushStore.followChat)
 //   맨 아래 '분석 기록 모아보기' (history/history_screen.dart)
 // 기호로 알 수 있는 건 글자로 따로 안 씀 (복사 · 설명 · 증감은 아이콘 · +/- · →)
@@ -58,8 +58,7 @@ class ConversationResultScreen extends StatelessWidget {
         crushes != null &&
         crushes.active.isNotEmpty &&
         partner != null &&
-        crushes.crushForChatName(partner) == null &&
-        !crushes.isSkipped(partner);
+        crushes.crushForChatName(partner) == null;
 
     return Scaffold(
       body: SafeArea(
@@ -147,7 +146,7 @@ class ConversationResultScreen extends StatelessWidget {
 
 /// '이 대화 상대(지민)는 누구예요?' [앱의 상대들] [+ 새 상대] [분석만] → '확인'
 /// 골라 두고 '확인'을 눌러야 정해짐, 상대를 고르면 연결하고 그 상대가 지금 상대가 됨
-/// 다음 분석부터 그 상대를 자동으로 고름, '분석만'은 이 이름을 다시 안 물음
+/// 다음 분석부터 그 상대를 자동으로 고름, '분석만'은 이번 결과에서만 카드를 닫음 (다음 분석 때 다시 물음)
 class _LinkCard extends StatefulWidget {
   const _LinkCard({required this.partner, required this.crushes});
 
@@ -166,6 +165,9 @@ class _LinkCardState extends State<_LinkCard> {
   /// 고른 것, 상대면 그 상대 id (아직 안 골랐으면 null)
   (_Link, int?)? _picked;
 
+  /// '분석만'으로 이번 결과에서 닫았으면 true
+  bool _closed = false;
+
   Future<void> _confirm() async {
     final picked = _picked;
     if (picked == null) return;
@@ -178,7 +180,7 @@ class _LinkCardState extends State<_LinkCard> {
       case (_Link.newCrush, _):
         await startNewCrush(context, chatName: partner);
       case (_Link.skip, _):
-        await crushes.skipChatName(partner);
+        setState(() => _closed = true);
       case (_Link.crush, null):
         break;
     }
@@ -186,6 +188,7 @@ class _LinkCardState extends State<_LinkCard> {
 
   @override
   Widget build(BuildContext context) {
+    if (_closed) return const SizedBox.shrink();
     final text = Theme.of(context).textTheme;
 
     Widget choice(String label, (_Link, int?) value) {

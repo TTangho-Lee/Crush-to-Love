@@ -1,5 +1,6 @@
 // 앱 틀
 // 하단 탭 4개 (홈 / 로드맵 / 대화 / 데이트)
+// 홈 · 로드맵은 lib/roadmap 화면
 // 탭마다 화면 이동 기록을 따로 가짐 (대화 탭에서 결과 화면으로 가도 하단 탭 유지)
 // 다른 화면에서 탭 바꾸기: MainShell.tabIndex.value = 1
 // 탭을 바꾸면 탭들이 옆으로 나란히 있는 것처럼 밀려 넘어감 (먼 탭은 사이 탭을 지나 더 빠르게, _TabSlider)
@@ -9,9 +10,9 @@ import 'package:material_ui/material_ui.dart';
 
 import '../analysis/chat/conversation_input_screen.dart';
 import '../analysis/date/date_prep_screen.dart';
-import '../mission/home/home_screen.dart';
-import '../mission/roadmap/roadmap_screen.dart';
 import '../outcome/outcome_screen.dart';
+import '../roadmap/roadmap_home_screen.dart';
+import '../roadmap/roadmap_overview_screen.dart';
 import '../shared/app_colors.dart';
 import '../shared/widgets/bottom_tab_bar.dart';
 
@@ -28,8 +29,8 @@ class MainShell extends StatefulWidget {
   static final reselected = ValueNotifier<(int, int)>((0, 0));
 
   static const List<Widget> _tabs = [
-    HomeScreen(),
-    RoadmapScreen(),
+    RoadmapHomeScreen(),
+    RoadmapOverviewScreen(),
     ConversationInputScreen(),
     DatePrepScreen(),
   ];

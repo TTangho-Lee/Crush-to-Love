@@ -2,7 +2,7 @@
 // 기대값은 tool/learning/expected.py (같은 계산을 파이썬으로), 소수는 1e-9까지
 // 해시 · 난수 · 특징 · 모델 평균 · 뽑기 · 취소 · 상대 지우기 · 저장 · 켜기/끄기 · 파이썬 규칙 옮긴 것 확인
 import 'package:flutter_test/flutter_test.dart';
-import 'package:one_way_love/dummy/dummy_roadmap_generator.dart';
+import 'package:one_way_love/roadmap/roadmap_generator.dart';
 import 'package:one_way_love/learning/learning_db.dart';
 import 'package:one_way_love/learning/learning_store.dart';
 import 'package:one_way_love/learning/linear_ts.dart';
@@ -258,7 +258,7 @@ void main() {
 
   test('파이썬으로 옮긴 규칙과 같은 로드맵 (tool/learning/dart_rules.py)', () {
     final today = DateTime(2026, 11, 20);
-    final r = buildDummyRoadmap(
+    final r = buildRoadmap(
       crushId: 1,
       profile: Profile(
         dDay: today.add(const Duration(days: 20)),
