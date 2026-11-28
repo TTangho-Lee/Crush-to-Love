@@ -135,3 +135,5 @@ tool/learning/            시뮬레이션 · 오프라인 평가 (Python)
 | 김민주 | **UI/UX Designer** | • **디자인 시스템:** Figma 시안 제작 및 Low-Fatigue · Non-AI 플랫 인터페이스 설계 |
 | 이채민 | **App & Algorithm Engineer** | • **앱 개발:** Flutter 기반 온보딩 · 미션 로드맵 · 대화 분석 · 데이트 가이드 · 결과 화면, 기기 안 SQLite 저장<br>• **로드맵 알고리즘:** D-Day · 친밀도 · 만남 빈도 · 용기에 따른 미션 분배 · 자동 조정 |
 | 장준영 | **AI & Data Engineer** | • **대화 분석 엔진:** 카톡 대화(답장 속도, 먼저 말 걸기, 되묻기 등) 규칙 기반 분석 · 멘트 추천<br>• **맞춤 추천 학습:** Thompson Sampling 기반 기기 안 학습 · 가상 사용자 시뮬레이션 평가 |
+<img width="2236" height="1245" alt="image" src="https://github.com/user-attachments/assets/6b2a1e9a-d776-40d8-b7a8-73bb8d97684d" />
+
