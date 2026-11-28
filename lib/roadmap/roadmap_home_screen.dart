@@ -4,9 +4,10 @@
 //   미션 카드 하나 (_MissionPanel): 주차 제목 · n/m (누르면 주차 상세 14~16번)
 //     주차 미션을 순서 그대로 위아래로, 한 번에 하나만 펼침 (아코디언, ⌄ · ⌃ 아이콘으로 암시)
 //       처음엔 오늘의 미션(규칙 · 맞춤 추천으로 고른 한 개)이 펼쳐짐, 다른 줄을 누르면 그게 펼쳐지고 나머지는 접힘
-//       펼친 칸: 용기 ●●○ · 방법 · 팁 · 고른 이유(학습에서 나온 이유면 아이콘이 다름) · ↻(오늘의 미션만)
+//       접힌 줄: 체크 · 이름 · 용기 ●●○ · ⌄, 펼친 칸: 용기 · 방법 · 팁만 (간결하게)
 //       체크 칸을 누르면 완료 · 취소, 줄 나머지를 누르면 펼치기 · 접기
-//     이번 주를 다 했으면 이번 주는 한 줄로 접고 다음 주 미션을 미리
+//     이번 주를 다 했으면 다 한 주차들은 한 줄(✓)씩 접고 남은 가장 가까운 주차 미션을 미리
+//     전 주차를 다 했으면 이번 주부터 마지막 주차까지 한 줄(✓)씩만 (누르면 주차 상세에서 취소 가능)
 //   D-Day가 지났으면 결과 입력(17번), 다 했으면 축하 카드
 import 'package:material_ui/material_ui.dart';
 
@@ -246,7 +247,7 @@ class _NoticeCard extends StatelessWidget {
 }
 
 /// 미션 카드 하나: 주차 제목 줄 · 미션 아코디언 (한 번에 하나만 펼침)
-/// 이번 주를 다 해서 다음 주를 미리 하면 이번 주는 한 줄(✓)로 접고 다음 주를 보여 줌
+/// 이번 주를 다 해서 다음 주를 미리 하면 이번 주부터 다 한 주차들은 한 줄(✓)씩 접고 미리 하는 주차를 보여 줌
 class _MissionPanel extends StatefulWidget {
   const _MissionPanel({
     super.key,
@@ -283,11 +284,6 @@ class _MissionPanelState extends State<_MissionPanel> {
     widget.store.toggleMission(m.id);
   }
 
-  void _rotate() {
-    setState(() => _chosen = false);
-    widget.store.rotateToday();
-  }
-
   @override
   Widget build(BuildContext context) {
     final store = widget.store;
@@ -297,43 +293,42 @@ class _MissionPanelState extends State<_MissionPanel> {
     final maxLevel = courageMax(store.situation.profile.courage);
     final openId = _chosen ? _openId : pick?.mission.id;
 
-    // 고른 이유 (규칙 · 학습)
-    final reasonOf = {for (final p in store.ranked) p.mission.id: p.reason};
+    // 이번 주부터 끝까지 다 했으면 주차 줄(✓)만
+    final rest = [
+      for (final w in store.weeks)
+        if (w.weekNo >= widget.week.weekNo) w,
+    ];
+    if (pick == null && rest.every((w) => w.allDone)) {
+      return Column(
+        spacing: 12,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [for (final w in rest) _WeekTitle(week: w, done: true)],
+      );
+    }
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        if (early) ...[
-          _WeekTitle(week: widget.week, done: true),
-          const SizedBox(height: 12),
-        ],
+        // 이번 주부터 미리 하는 주차 앞까지 (다 한 주차)
+        if (early)
+          for (final w in store.weeks)
+            if (w.weekNo >= widget.week.weekNo && w.weekNo < shown.weekNo) ...[
+              _WeekTitle(week: w, done: true),
+              const SizedBox(height: 12),
+            ],
         _WeekTitle(week: shown, early: early),
         const SizedBox(height: 10),
         Column(
           spacing: 8,
           children: [
             for (final m in shown.missions)
-              if (pick != null && m.id == pick.mission.id)
-                _MissionItem(
-                  mission: m,
-                  open: m.id == openId,
-                  today: true,
-                  brave: pick.brave,
-                  reason: pick.reason,
-                  learned: pick.learned,
-                  onTap: () => _tap(m.id, openId),
-                  onToggle: () => _toggle(m, openId),
-                  onRotate: store.canRotate ? _rotate : null,
-                )
-              else
-                _MissionItem(
-                  mission: m,
-                  open: m.id == openId,
-                  brave: !m.done && m.level > maxLevel,
-                  reason: m.done ? null : reasonOf[m.id],
-                  onTap: () => _tap(m.id, openId),
-                  onToggle: () => _toggle(m, openId),
-                ),
+              _MissionItem(
+                mission: m,
+                open: m.id == openId,
+                brave: !m.done && m.level > maxLevel,
+                onTap: () => _tap(m.id, openId),
+                onToggle: () => _toggle(m, openId),
+              ),
           ],
         ),
       ],
@@ -341,19 +336,15 @@ class _MissionPanelState extends State<_MissionPanel> {
   }
 }
 
-/// 미션 한 칸: 체크(누르면 완료 · 취소) · 이름 · ✦/⚡ · 용기 ●●○ · ⌄
-/// 펼치면 그 아래 방법 · 팁 · 고른 이유, 맨 윗줄을 누르면 접힘(⌃)
+/// 미션 한 칸: 체크(누르면 완료 · 취소) · 이름 · 용기 ●●○ · ⌄
+/// 펼치면 그 아래 용기 · 방법 · 팁, 맨 윗줄을 누르면 접힘(⌃)
 class _MissionItem extends StatelessWidget {
   const _MissionItem({
     required this.mission,
     required this.open,
     required this.onTap,
     required this.onToggle,
-    this.today = false,
     this.brave = false,
-    this.reason,
-    this.learned = false,
-    this.onRotate,
   });
 
   final RoadmapMission mission;
@@ -365,27 +356,14 @@ class _MissionItem extends StatelessWidget {
   /// 완료 · 취소 (체크 칸)
   final VoidCallback onToggle;
 
-  /// 오늘의 미션이면 true (✦ · '오늘')
-  final bool today;
-
-  /// 지금 용기보다 어려운 미션 (⚡ · '용기 보너스 ×1.5')
+  /// 지금 용기보다 어려운 미션 (펼친 칸에 '용기 보너스 ×1.5')
   final bool brave;
-
-  /// 고른 이유 한 줄 (다 한 미션 · 이유 없음이면 null)
-  final String? reason;
-
-  /// 이유가 학습에서 나왔으면 true (아이콘이 다름)
-  final bool learned;
-
-  /// 다른 미션으로 바꾸기 (오늘의 미션이고 바꿀 게 있을 때만)
-  final VoidCallback? onRotate;
 
   @override
   Widget build(BuildContext context) {
     final text = Theme.of(context).textTheme;
     final m = mission;
     final done = m.done;
-    final reason = this.reason;
 
     final head = GestureDetector(
       onTap: onTap,
@@ -416,20 +394,6 @@ class _MissionItem extends StatelessWidget {
             ),
             const SizedBox(width: 8),
             if (!open) ...[
-              if (today && !done)
-                const Padding(
-                  padding: EdgeInsets.only(right: 4),
-                  child: Icon(
-                    Icons.auto_awesome,
-                    size: 14,
-                    color: AppColors.peach,
-                  ),
-                ),
-              if (brave)
-                const Padding(
-                  padding: EdgeInsets.only(right: 4),
-                  child: Icon(Icons.bolt, size: 14, color: AppColors.peach),
-                ),
               for (var i = 1; i <= 3; i++)
                 Padding(
                   padding: const EdgeInsets.only(left: 2),
@@ -456,53 +420,9 @@ class _MissionItem extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              if (today && !done) ...[
-                const Pill(
-                  icon: Icons.auto_awesome,
-                  label: '오늘',
-                  color: AppColors.blush,
-                ),
-                const SizedBox(width: 6),
-              ],
-              Expanded(child: MissionMeta(mission: m, brave: brave)),
-              if (onRotate != null)
-                IconButton(
-                  onPressed: onRotate,
-                  icon: const Icon(Icons.refresh, size: 18),
-                  color: AppColors.warmGray,
-                  visualDensity: VisualDensity.compact,
-                  tooltip: '다른 미션',
-                ),
-            ],
-          ),
+          MissionMeta(mission: m, brave: brave),
           const SizedBox(height: 8),
           Text(m.tip, style: text.bodySmall),
-          if (reason != null) ...[
-            const SizedBox(height: 12),
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-              decoration: BoxDecoration(
-                color: AppColors.ivory,
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // 학습에서 나온 이유면 다른 아이콘
-                  Icon(
-                    learned ? Icons.insights : Icons.auto_awesome,
-                    size: 13,
-                    color: AppColors.peach,
-                  ),
-                  const SizedBox(width: 6),
-                  Expanded(child: Text(reason, style: text.bodySmall)),
-                ],
-              ),
-            ),
-          ],
         ],
       ),
     );

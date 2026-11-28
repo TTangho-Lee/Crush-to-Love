@@ -69,7 +69,7 @@ class _RoadmapRelationScreenState extends State<RoadmapRelationScreen> {
         child: ListView(
           padding: const EdgeInsets.fromLTRB(24, 16, 24, 24),
           children: [
-            const AppHeader(showCrush: false),
+            AppHeader(onBack: () => Navigator.pop(context)),
             const SizedBox(height: 24),
             Text('우리 사이 업데이트', style: text.headlineSmall),
             const SizedBox(height: 8),

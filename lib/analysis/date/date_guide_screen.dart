@@ -40,7 +40,7 @@ class DateGuideScreen extends StatelessWidget {
         child: ListView(
           padding: const EdgeInsets.fromLTRB(24, 16, 24, 24),
           children: [
-            // 오른쪽 위 되돌아가기 → 10번 (고른 조건은 그대로)
+            // 왼쪽 위 되돌아가기 → 10번 (고른 조건은 그대로)
             AppHeader(onBack: () => Navigator.pop(context)),
             const SizedBox(height: 24),
             Text('만나기 전에 챙길 것', style: text.headlineSmall),

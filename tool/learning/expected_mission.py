@@ -1,4 +1,4 @@
-"""test/learning_mission_test.dart 기대값: DummyMissionStore에 학습을 붙였을 때 (Dart와 같은 계산)
+"""test/learning_mission_test.dart 기대값: RoadmapStore에 학습을 붙였을 때 (Dart와 같은 계산)
 
     python expected_mission.py
 

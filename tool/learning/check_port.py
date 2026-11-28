@@ -1,4 +1,4 @@
-"""dart_rules.py가 Dart 규칙과 같은지 확인 (test/dummy_mission_test.dart와 같은 경우)
+"""dart_rules.py가 Dart 규칙과 같은지 확인 (test/roadmap_test.dart와 같은 경우)
 
     python check_port.py
 """
