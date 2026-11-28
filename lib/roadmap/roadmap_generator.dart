@@ -15,6 +15,8 @@
 //     입력값이 바뀌면(replanRoadmap): 끝난 주차는 그대로, 이번 주부터 완료한 미션은 남기고 나머지를 새로
 //     자동 조정(adaptRoadmap): 끝난 주차 · 이번 주는 그대로, 다음 주부터 단계가 바뀐 주차만 새로
 //     주차 다시 고르기(recomposeWeek): 그 주차만 순서대로 새로 (완료한 미션은 남김, 주차가 시작될 때 학습으로)
+//     못 한 미션 바꾸기(replaceMission): 같은 단계에서 그보다 어렵지 않고 용기에 가까운 미션으로 한 개만, 같은 자리에
+//       같은 자리에서 2번 바꿨거나 더 쉬운 게 없으면 ✕로 닫음 (어려운 미션으로 올라가지 않게)
 import 'dart:math';
 
 import '../shared/models.dart';
@@ -26,6 +28,9 @@ const maxRoadmapWeeks = 8;
 
 /// 주차마다 미션 수
 const missionsPerWeek = 3;
+
+/// '못 했어요'로 같은 자리를 바꿔 주는 횟수 (넘으면 ✕)
+const maxRetries = 2;
 
 /// 주차 미션 고르는 순서 (단계 사전 번호, 앞일수록 먼저), 주차 번호는 1부터
 typedef RoadmapOrder = List<int> Function(RoadmapStage stage, int weekNo);
@@ -133,6 +138,7 @@ Roadmap recomposeWeek(
     for (var i = 0; i < r.weeks.length; i++)
       if (i != weekIndex)
         for (final m in r.weeks[i].missions) m.id,
+    ...week.failed,
   };
   final missions = _pick(
     week.stage,
@@ -149,6 +155,78 @@ Roadmap recomposeWeek(
   return r.copyWith(weeks: [
     for (var i = 0; i < r.weeks.length; i++)
       i == weekIndex ? week.copyWith(missions: missions) : r.weeks[i],
+  ]);
+}
+
+/// '못 했어요': 안 한 미션 하나를 같은 단계의 다른 미션으로 (같은 자리, 로드맵에 없고 이 주차에서 뺀 적 없는 것만)
+/// 뺀 미션은 주차의 failed에 남겨 다시 안 고름 (번갈아 반복 안 되게)
+/// 그 미션보다 어렵지 않은 것만 → 용기에 가까운 것 → 돌려 고르는 순서
+/// 같은 자리에서 maxRetries번 바꿨거나 그런 미션이 없으면 그 미션을 ✕로, 안 한 미션이 아니면 null
+Roadmap? replaceMission(
+  Roadmap r, {
+  required Profile profile,
+  required String missionId,
+}) {
+  final wi = r.weeks.indexWhere(
+    (w) => w.missions.any((m) => m.id == missionId && !m.closed),
+  );
+  if (wi < 0) return null;
+  final week = r.weeks[wi];
+  final failed = week.missions.firstWhere((m) => m.id == missionId);
+  final lines = missionLines[week.stage]!;
+  final maxLevel = courageMax(profile.courage);
+  final canMeet = profile.meetingsPerWeek > 0;
+  final used = {
+    for (final w in r.weeks)
+      for (final m in w.missions) m.id,
+    ...week.failed,
+  };
+  String idOf(int i) => '${week.stage.name}-$i';
+  int fit(int level) => level <= maxLevel ? maxLevel - level : 10 + level;
+  final seed = r.crushId * 31 + week.weekNo * 7;
+  final order = [
+    for (var i = 0; i < lines.length; i++) (i * 5 + seed) % lines.length,
+  ];
+  final candidates = [
+    for (final (pos, i) in order.indexed)
+      if ((canMeet || !lines[i].offline) &&
+          !used.contains(idOf(i)) &&
+          lines[i].level <= failed.level)
+        (pos, i),
+  ];
+  // 더 바꾸지 않고 ✕
+  if (failed.retries >= maxRetries || candidates.isEmpty) {
+    return r.copyWith(weeks: [
+      for (var k = 0; k < r.weeks.length; k++)
+        k == wi
+            ? week.copyWith(missions: [
+                for (final m in week.missions)
+                  m.id == missionId ? m.markFailed(true) : m,
+              ])
+            : r.weeks[k],
+    ]);
+  }
+  candidates.sort((a, b) {
+    final byFit = fit(lines[a.$2].level).compareTo(fit(lines[b.$2].level));
+    return byFit != 0 ? byFit : a.$1.compareTo(b.$1);
+  });
+  final i = candidates.first.$2;
+  final next = RoadmapMission(
+    id: idOf(i),
+    title: lines[i].title,
+    tip: lines[i].tip,
+    retries: failed.retries + 1,
+  );
+  return r.copyWith(weeks: [
+    for (var k = 0; k < r.weeks.length; k++)
+      k == wi
+          ? week.copyWith(
+              missions: [
+                for (final m in week.missions) m.id == missionId ? next : m,
+              ],
+              failed: [...week.failed, missionId],
+            )
+          : r.weeks[k],
   ]);
 }
 
@@ -253,7 +331,8 @@ List<RoadmapWeek> _weeks(
       seed: crushId * 31 + (i + 1) * 7,
       canMeet: profile.meetingsPerWeek > 0,
       maxLevel: courageMax(profile.courage),
-      used: used,
+      // '못 했어요'로 뺀 미션은 다시 짜도 안 고름
+      used: {...used, ...?prev?.failed},
       keep: [
         for (final m in prev?.missions ?? const <RoadmapMission>[])
           if (m.done) m,
@@ -267,6 +346,7 @@ List<RoadmapWeek> _weeks(
       fromDDay: from,
       toDDay: to,
       missions: missions,
+      failed: prev?.failed ?? const [],
     ));
   }
 

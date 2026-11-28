@@ -243,7 +243,7 @@ Future<void> judgeEndedWeeks(
       chat: chat,
     );
     for (final m in w.missions) {
-      if (m.done) continue;
+      if (m.closed) continue;
       final rule = missionRuleScore(s, m, w.stage, today: lastDay);
       final arm = missionArmOf(m);
       await store.record(

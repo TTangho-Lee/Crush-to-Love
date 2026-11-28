@@ -484,7 +484,12 @@ def adapt_shift(s: Situation) -> int | None:
         return None
     if chat is not None and chat.interest == 'low':
         return None if cur == -1 else -1
-    if cur < 0 and chat is not None:
+    # 미션이 밀리면 한 단계씩 늦춤 (당겨 둔 상태면 원래 속도로 먼저)
+    if s.pace == 'behind':
+        if cur >= 1:
+            return 0
+        return -1 if cur == 0 else None
+    if cur < 0:
         return 0
     if cur >= 1:
         return None

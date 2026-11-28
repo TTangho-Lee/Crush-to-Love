@@ -3,8 +3,10 @@
 //   목표 카드: 사유 D-n · 목표 진척도 % · 주차별 막대 · 진도 · 용기 단계 · '업데이트 ›'(11번)
 //   미션 카드 하나 (_MissionPanel): 주차 제목 · n/m (누르면 주차 상세 14~16번)
 //     주차 미션을 순서 그대로 위아래로, 한 번에 하나만 펼침 (아코디언, ⌄ · ⌃ 아이콘으로 암시)
-//       처음엔 오늘의 미션(규칙 · 맞춤 추천으로 고른 한 개)이 펼쳐짐, 다른 줄을 누르면 그게 펼쳐지고 나머지는 접힘
-//       접힌 줄: 체크 · 이름 · 용기 ●●○ · ⌄, 펼친 칸: 용기 · 방법 · 팁만 (간결하게)
+//       처음엔 맨 위 안 끝난 미션이 펼쳐짐, 그 뒤로는 누른 줄만 펼쳐지고 저절로 바뀌지 않음
+//       체크 칸으로 완료하면 바로 아래 미션이 펼쳐짐 (주차 끝이면 다음 주차 첫 미션)
+//       접힌 줄: 체크 · 이름 · 용기 ●●○ · ⌄, 펼친 칸: 용기 · 방법 · 팁 · '못 했어요'(같은 단계 더 쉬운 미션으로, 2번 바꾼 뒤엔 ✕, 감점 없음)
+//       ✕ 미션은 체크 칸을 누르면 다시 열림
 //       체크 칸을 누르면 완료 · 취소, 줄 나머지를 누르면 펼치기 · 접기
 //     이번 주를 다 했으면 다 한 주차들은 한 줄(✓)씩 접고 남은 가장 가까운 주차 미션을 미리
 //     전 주차를 다 했으면 이번 주부터 마지막 주차까지 한 줄(✓)씩만 (누르면 주차 상세에서 취소 가능)
@@ -269,18 +271,27 @@ class _MissionPanel extends StatefulWidget {
 }
 
 class _MissionPanelState extends State<_MissionPanel> {
-  /// 직접 고른 펼칠 미션 (null이면 다 접음), _chosen이 false면 오늘의 미션을 펼침
-  String? _openId;
-  bool _chosen = false;
+  /// 펼친 칸 (주차 번호, 몇 번째), null이면 다 접음
+  /// 직접 누르기 전(_touched false)엔 맨 위 안 끝난 미션, 그 뒤로는 누른 대로만
+  /// '못 했어요'로 바뀌어도 같은 자리라 그대로 펼쳐 둠
+  (int, int)? _open;
+  bool _touched = false;
 
-  void _tap(String id, String? openNow) => setState(() {
-        _chosen = true;
-        _openId = openNow == id ? null : id;
+  void _tap((int, int) slot, (int, int)? openNow) => setState(() {
+        _touched = true;
+        _open = openNow == slot ? null : slot;
       });
 
-  void _toggle(RoadmapMission m, String? openId) {
-    // 펼친 미션을 끝내면 다음 오늘의 미션을 펼침
-    if (!m.done && m.id == openId) setState(() => _chosen = false);
+  /// 체크 칸: 완료로 바꿀 때만 바로 아래 미션을 펼침 (주차 끝이면 다음 주차 첫 미션)
+  void _toggle(RoadmapWeek week, int i, RoadmapMission m) {
+    if (!m.closed) {
+      setState(() {
+        _touched = true;
+        _open = i + 1 < week.missions.length
+            ? (week.weekNo, i + 1)
+            : (week.weekNo + 1, 0);
+      });
+    }
     widget.store.toggleMission(m.id);
   }
 
@@ -291,7 +302,8 @@ class _MissionPanelState extends State<_MissionPanel> {
     final early = pick != null && pick.early;
     final shown = pick != null && pick.early ? pick.week : widget.week;
     final maxLevel = courageMax(store.situation.profile.courage);
-    final openId = _chosen ? _openId : pick?.mission.id;
+    final first = shown.missions.indexWhere((m) => !m.closed);
+    final open = _touched ? _open : (shown.weekNo, first < 0 ? 0 : first);
 
     // 이번 주부터 끝까지 다 했으면 주차 줄(✓)만
     final rest = [
@@ -321,13 +333,16 @@ class _MissionPanelState extends State<_MissionPanel> {
         Column(
           spacing: 8,
           children: [
-            for (final m in shown.missions)
+            for (final (i, m) in shown.missions.indexed)
               _MissionItem(
                 mission: m,
-                open: m.id == openId,
-                brave: !m.done && m.level > maxLevel,
-                onTap: () => _tap(m.id, openId),
-                onToggle: () => _toggle(m, openId),
+                open: open == (shown.weekNo, i),
+                brave: !m.closed && m.level > maxLevel,
+                onTap: () => _tap((shown.weekNo, i), open),
+                onToggle: () => _toggle(shown, i, m),
+                onFail: !m.closed && open == (shown.weekNo, i) && store.canReplace(m.id)
+                    ? () => store.failMission(m.id)
+                    : null,
               ),
           ],
         ),
@@ -337,7 +352,7 @@ class _MissionPanelState extends State<_MissionPanel> {
 }
 
 /// 미션 한 칸: 체크(누르면 완료 · 취소) · 이름 · 용기 ●●○ · ⌄
-/// 펼치면 그 아래 용기 · 방법 · 팁, 맨 윗줄을 누르면 접힘(⌃)
+/// 펼치면 그 아래 용기 · 방법 · 팁 · '못 했어요', 맨 윗줄을 누르면 접힘(⌃)
 class _MissionItem extends StatelessWidget {
   const _MissionItem({
     required this.mission,
@@ -345,6 +360,7 @@ class _MissionItem extends StatelessWidget {
     required this.onTap,
     required this.onToggle,
     this.brave = false,
+    this.onFail,
   });
 
   final RoadmapMission mission;
@@ -359,11 +375,16 @@ class _MissionItem extends StatelessWidget {
   /// 지금 용기보다 어려운 미션 (펼친 칸에 '용기 보너스 ×1.5')
   final bool brave;
 
+  /// '못 했어요' (다른 미션으로 바꾸기), 바꿀 게 없거나 다 했으면 null
+  final VoidCallback? onFail;
+
   @override
   Widget build(BuildContext context) {
     final text = Theme.of(context).textTheme;
     final m = mission;
     final done = m.done;
+    // 완료 · ✕는 같은 흐린 모양
+    final closed = m.closed;
 
     final head = GestureDetector(
       onTap: onTap,
@@ -378,7 +399,7 @@ class _MissionItem extends StatelessWidget {
               behavior: HitTestBehavior.opaque,
               child: Padding(
                 padding: const EdgeInsets.all(6),
-                child: CheckMark(checked: done, size: 24),
+                child: CheckMark(checked: done, failed: m.failed, size: 24),
               ),
             ),
             const SizedBox(width: 6),
@@ -388,7 +409,7 @@ class _MissionItem extends StatelessWidget {
                 maxLines: open ? 2 : 1,
                 overflow: TextOverflow.ellipsis,
                 style: (open ? text.titleSmall : text.bodyMedium)?.copyWith(
-                  color: done ? AppColors.warmGray : AppColors.charcoal,
+                  color: closed ? AppColors.warmGray : AppColors.charcoal,
                 ),
               ),
             ),
@@ -423,6 +444,20 @@ class _MissionItem extends StatelessWidget {
           MissionMeta(mission: m, brave: brave),
           const SizedBox(height: 8),
           Text(m.tip, style: text.bodySmall),
+          if (onFail != null)
+            Align(
+              alignment: Alignment.centerRight,
+              child: TextButton.icon(
+                onPressed: onFail,
+                icon: const Icon(Icons.swap_horiz, size: 16),
+                label: const Text('못 했어요'),
+                style: TextButton.styleFrom(
+                  foregroundColor: AppColors.warmGray,
+                  textStyle: text.labelSmall,
+                  visualDensity: VisualDensity.compact,
+                ),
+              ),
+            ),
         ],
       ),
     );
@@ -432,7 +467,11 @@ class _MissionItem extends StatelessWidget {
       decoration: BoxDecoration(
         color: open
             ? AppColors.warmWhite
-            : (done ? AppColors.roseSoft : AppColors.ivory),
+            : (done
+                ? AppColors.roseSoft
+                : m.failed
+                    ? AppColors.track.withValues(alpha: 0.4)
+                    : AppColors.ivory),
         borderRadius: BorderRadius.circular(open ? 16 : 12),
         border: Border.all(color: open ? AppColors.border : Colors.transparent),
       ),

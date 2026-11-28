@@ -13,7 +13,8 @@
 //       대화 분석 추천 방향과 같은 행동 +, 상대 반응이 조심스러우면 먼저 연락 · 약속 · 마음 표현 -
 //       이번 주를 다 했으면 아직 남은 가장 가까운 다음 주차 미션을 미리 (2주 앞서도)
 //   ⑤ 다음 주차 조정(adaptShift): 대화로 본 사이가 더 가깝거나 진도가 빠르면 한 단계 당김,
-//       상대 반응이 조심스러우면 한 단계 늦춤 (당긴 건 반응이 나빠질 때만 되돌림)
+//       상대 반응이 조심스럽거나 미션이 밀리면(진도 늦음) 한 단계 늦춤 (당긴 상태면 원래 속도로 먼저)
+//       늦춘 뒤 반응이 나아지거나 진도를 따라잡으면 원래 속도로
 import 'dart:math';
 
 import '../analysis/chat/rules/lines.dart' show Approach;
@@ -139,7 +140,7 @@ class MissionSituation {
 
   CourageLevel get courage => CourageLevel.of(profile.courage);
   RoadmapWeek get week => roadmap.weeks[weekIndex];
-  bool get allDone => doneCount == totalCount;
+  bool get allDone => roadmap.weeks.every((w) => w.allDone);
   bool get passed => daysLeft < 0;
 
   /// 마지막 대화가 며칠 전인지, 모르면 null
@@ -413,7 +414,7 @@ List<TodayPick> rankToday(MissionSituation s, {required DateTime today}) {
   final scored = <(double, String, int, RoadmapMission)>[];
   for (var i = 0; i < week.missions.length; i++) {
     final m = week.missions[i];
-    if (m.done) continue;
+    if (m.closed) continue;
     final rules = missionRuleTerms(s, m, week.stage, today: today);
     final total = rules.fold(0.0, (sum, r) => sum + r.$1);
     final best = rules.where((r) => r.$1 > 0 && r.$2.isNotEmpty).fold<(double, String)?>(
@@ -456,8 +457,15 @@ List<TodayPick> rankToday(MissionSituation s, {required DateTime today}) {
   if (chat != null && chat.interest == InterestLevel.low) {
     return current == -1 ? null : (-1, '상대 반응이 조심스러워서 다음 주부터 한 단계 천천히 가요');
   }
-  if (current < 0 && chat != null) {
-    return (0, '상대 반응이 나아져서 원래 속도로 돌아왔어요');
+  // 미션이 밀리면 한 단계씩 늦춤 (당겨 둔 상태면 원래 속도로 먼저)
+  if (s.pace == Pace.behind) {
+    if (current >= 1) return (0, '미션이 밀려서 원래 속도로 돌아왔어요');
+    return current == 0 ? (-1, '미션이 밀려서 다음 주부터 한 단계 천천히 가요') : null;
+  }
+  if (current < 0) {
+    return chat != null
+        ? (0, '상대 반응이 나아져서 원래 속도로 돌아왔어요')
+        : (0, '진도를 따라잡아서 원래 속도로 돌아왔어요');
   }
   if (current >= 1) return null;
   final seen = chat?.intimacy;

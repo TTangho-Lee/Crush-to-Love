@@ -196,6 +196,79 @@ void main() {
     );
   });
 
+  test('못 했어요: 같은 자리에 같은 단계 더 어렵지 않은 미션, 2번 바꾼 뒤엔 ✕', () {
+    final p = profileOf();
+    final r = build(p);
+    final week = r.weeks.first;
+    final failed = week.missions[1];
+    final next = replaceMission(r, profile: p, missionId: failed.id)!;
+    final swapped = next.weeks.first.missions[1];
+    expect(swapped.id, isNot(failed.id));
+    expect(swapped.id.startsWith('${week.stage.name}-'), isTrue);
+    expect(swapped.level, lessThanOrEqualTo(failed.level));
+    final others = {
+      for (final w in r.weeks)
+        for (final m in w.missions) m.id,
+    };
+    expect(others.contains(swapped.id), isFalse);
+    expect(next.weeks.first.missions[0], week.missions[0]);
+    expect(next.weeks.skip(1).toList(), r.weeks.skip(1).toList());
+    // 계속 누르면: 더 어렵지 않은 것으로 2번까지 바꾸고 (뺀 미션은 다시 안 나옴), 그다음엔 ✕
+    var cur = r;
+    final seen = <String>{failed.id};
+    var id = failed.id;
+    var swaps = 0;
+    for (var n = 0; n < 10; n++) {
+      final after = replaceMission(cur, profile: p, missionId: id)!;
+      final slot = after.weeks.first.missions[1];
+      cur = after;
+      if (slot.failed) break;
+      swaps++;
+      expect(seen.contains(slot.id), isFalse);
+      expect(slot.level, lessThanOrEqualTo(failed.level));
+      seen.add(slot.id);
+      id = slot.id;
+    }
+    final last = cur.weeks.first.missions[1];
+    expect(last.failed, isTrue);
+    expect(last.id, id);
+    expect(swaps, lessThanOrEqualTo(maxRetries));
+    expect(cur.weeks.first.failed.length, swaps);
+    expect(replaceMission(cur, profile: p, missionId: id), isNull); // ✕는 더 안 바꿈
+    expect(cur.weeks.first.doneCount, 0); // 진척도엔 안 들어감
+    final json = RoadmapWeek.fromJson(cur.weeks.first.toJson());
+    expect(json.failed, cur.weeks.first.failed);
+    expect(json.missions[1].failed, isTrue);
+    // 다 한 주차는 ✕가 섞여도 끝난 주차
+    final mixed = cur.weeks.first.copyWith(missions: [
+      for (final m in cur.weeks.first.missions)
+        m.failed ? m : m.mark(true, at: today),
+    ]);
+    expect(mixed.allDone, isTrue);
+    expect(mixed.doneCount, mixed.missions.length - 1);
+    // 다 한 미션 · 없는 미션은 안 바꿈
+    final done = doneWeek(r, 0);
+    expect(replaceMission(done, profile: p, missionId: failed.id), isNull);
+    expect(replaceMission(r, profile: p, missionId: 'none-0'), isNull);
+  });
+
+  test('자동 조정: 미션이 밀리면 다음 주부터 한 단계 늦추고, 따라잡으면 원래 속도로', () {
+    final p = profileOf(goal: Goal.some);
+    final r = build(p);
+    // 2주차 끝 무렵인데 하나도 안 함 → 진도 늦음
+    final day12 = today.add(const Duration(days: 12));
+    final late = readSituation(profile: p, roadmap: r, today: day12);
+    expect(late.pace, Pace.behind);
+    final (shift, _) = adaptShift(late)!;
+    expect(shift, -1);
+    final slow = r.copyWith(shift: -1);
+    expect(adaptShift(readSituation(profile: p, roadmap: slow, today: day12)), isNull);
+    // 다 따라잡으면 원래 속도로
+    final caught = doneWeek(doneWeek(slow, 0), 1);
+    final back = adaptShift(readSituation(profile: p, roadmap: caught, today: day12))!;
+    expect(back.$1, 0);
+  });
+
   test('자동 조정: 진도가 빠르면 다음 주부터 한 단계 당기고, 반응이 조심스러우면 늦춤', () {
     final p = profileOf(goal: Goal.some);
     final r = doneWeek(build(p), 0);
