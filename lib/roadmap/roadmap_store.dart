@@ -205,6 +205,17 @@ class RoadmapStore extends ChangeNotifier {
     // 학습 기록은 바꾸기 전 상황으로
     final before = situation;
     final learning = isExample ? null : _learning;
+    // ✕ 미션의 체크 칸: 다시 열기만 (완료 · 학습 기록 없음)
+    if (r.weeks.any((w) => w.missions.any((m) => m.id == missionId && m.failed))) {
+      await _put(r.copyWith(weeks: [
+        for (final w in r.weeks)
+          w.copyWith(missions: [
+            for (final m in w.missions)
+              m.id == missionId ? m.markFailed(false) : m,
+          ]),
+      ]));
+      return;
+    }
     final found = [
       for (final w in r.weeks)
         for (final m in w.missions)
@@ -257,6 +268,32 @@ class RoadmapStore extends ChangeNotifier {
     _frozen.clear();
     _recompose(force: true);
     notifyListeners();
+  }
+
+  /// '못 했어요'를 누를 수 있으면 true (아직 안 한 미션)
+  bool canReplace(String missionId) =>
+      replaceMission(roadmap, profile: profile, missionId: missionId) != null;
+
+  /// '못 했어요': 같은 단계의 더 어렵지 않은 미션으로 바꾸고, 2번 바꾼 자리 · 바꿀 게 없으면 ✕ (감점 없음, 학습엔 '↻'처럼 약한 −)
+  Future<void> failMission(String missionId) async {
+    final r = roadmap;
+    final next = replaceMission(r, profile: profile, missionId: missionId);
+    if (next == null) return;
+    final learning = _learning;
+    if (learns && learning != null) {
+      final picks = _ranked().where((p) => p.mission.id == missionId);
+      if (picks.isNotEmpty) {
+        unawaited(recordSkip(
+          learning,
+          picks.first,
+          situation,
+          crushId: r.crushId,
+          now: _clock(),
+        ));
+      }
+    }
+    await _put(next);
+    _adapt();
   }
 
   /// '↻ 다른 미션' (보던 미션은 약한 −로 배움)

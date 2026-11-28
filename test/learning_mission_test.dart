@@ -129,13 +129,13 @@ void main() {
     final pick = store.todayPick!;
     expect(before.mission.id, 'topic-8');
     expect(pick.mission.id, 'topic-1');
-    expect(pick.reason, '질문하는 미션을 잘 해냈어요');
+    expect(pick.reason, '반응 남기는 미션을 잘 해냈어요');
     expect(pick.learned, isTrue);
 
     // 잘 해낸 것 · 잘 안 한 것 (가중치가 같으면 특징 순서)
     final (good, bad) = missionTraits(learning);
-    expect([for (final t in good) t.$1], ['질문', '마음 표현', '저녁에 만나지 않고']);
-    expect([for (final t in bad) t.$1], ['직접 만나기', '인사', '챙기기']);
+    expect([for (final t in good) t.$1], ['반응 남기기', '주말에 만나기', '질문']);
+    expect([for (final t in bad) t.$1], ['인사', '혼자 준비', '챙기기']);
   });
 
   test('기록: 완료 · 완료 취소 · ↻ · 끝난 주차의 안 한 미션', () async {

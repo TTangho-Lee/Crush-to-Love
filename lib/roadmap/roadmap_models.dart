@@ -11,6 +11,8 @@ class RoadmapMission {
     this.done = false,
     this.doneAt,
     this.brave = false,
+    this.failed = false,
+    this.retries = 0,
   });
 
   /// 사전 위치 ('topic-2' = 이야기할 거리 찾기 3번째 미션)
@@ -26,6 +28,15 @@ class RoadmapMission {
 
   /// 그때 용기 단계보다 어려운 미션을 해냈으면 true (진척도 1.5배)
   final bool brave;
+
+  /// '못 했어요'를 더 바꾸지 않고 ✕로 닫았으면 true (진척도엔 안 들어가고, 주차 끝으로 셈)
+  final bool failed;
+
+  /// 이 자리에서 '못 했어요'로 바꾼 횟수 (2번 바꾼 뒤엔 ✕)
+  final int retries;
+
+  /// 끝난 미션 (완료 또는 ✕)
+  bool get closed => done || failed;
 
   /// 사전 속 미션 (사전이 바뀌어 없어졌으면 null)
   MissionLine? get line {
@@ -53,6 +64,16 @@ class RoadmapMission {
         done: done,
         doneAt: done ? at : null,
         brave: done && brave,
+        retries: retries,
+      );
+
+  /// ✕로 닫기 · 다시 열기
+  RoadmapMission markFailed(bool failed) => RoadmapMission(
+        id: id,
+        title: title,
+        tip: tip,
+        failed: failed,
+        retries: retries,
       );
 
   Map<String, Object?> toJson() => {
@@ -62,6 +83,8 @@ class RoadmapMission {
         'done': done,
         if (doneAt != null) 'doneAt': doneAt!.toIso8601String(),
         if (brave) 'brave': true,
+        if (failed) 'failed': true,
+        if (retries > 0) 'retries': retries,
       };
 
   factory RoadmapMission.fromJson(Map<String, Object?> json) => RoadmapMission(
@@ -71,6 +94,8 @@ class RoadmapMission {
         done: json['done'] == true,
         doneAt: DateTime.tryParse(json['doneAt'] as String? ?? ''),
         brave: json['brave'] == true,
+        failed: json['failed'] == true,
+        retries: json['retries'] as int? ?? 0,
       );
 }
 
@@ -82,6 +107,7 @@ class RoadmapWeek {
     required this.fromDDay,
     required this.toDDay,
     required this.missions,
+    this.failed = const [],
   });
 
   /// 1부터
@@ -97,14 +123,17 @@ class RoadmapWeek {
   final int toDDay;
   final List<RoadmapMission> missions;
 
+  /// '못 했어요'로 뺀 미션 id (이 주차엔 다시 안 고름)
+  final List<String> failed;
+
   /// 주차 목표 (예: 인사할 틈 만들기)
   String get title => stage.title;
 
   /// 완료한 미션 수
   int get doneCount => missions.where((m) => m.done).length;
 
-  /// 이번 주 미션을 다 했으면 true
-  bool get allDone => missions.every((m) => m.done);
+  /// 이번 주 미션이 다 끝났으면 true (완료 또는 ✕)
+  bool get allDone => missions.every((m) => m.closed);
 
   /// '1주차', 한 주차가 7일보다 길면 '1단계' (D-Day가 아주 멀 때)
   String get label => fromDDay - toDDay + 1 > 7 ? '$weekNo단계' : '$weekNo주차';
@@ -113,6 +142,7 @@ class RoadmapWeek {
     int? fromDDay,
     int? toDDay,
     List<RoadmapMission>? missions,
+    List<String>? failed,
   }) =>
       RoadmapWeek(
         weekNo: weekNo,
@@ -120,6 +150,7 @@ class RoadmapWeek {
         fromDDay: fromDDay ?? this.fromDDay,
         toDDay: toDDay ?? this.toDDay,
         missions: missions ?? this.missions,
+        failed: failed ?? this.failed,
       );
 
   Map<String, Object?> toJson() => {
@@ -128,6 +159,7 @@ class RoadmapWeek {
         'fromDDay': fromDDay,
         'toDDay': toDDay,
         'missions': [for (final m in missions) m.toJson()],
+        if (failed.isNotEmpty) 'failed': failed,
       };
 
   factory RoadmapWeek.fromJson(Map<String, Object?> json) => RoadmapWeek(
@@ -143,6 +175,9 @@ class RoadmapWeek {
         missions: [
           for (final m in json['missions'] as List)
             RoadmapMission.fromJson((m as Map).cast<String, Object?>()),
+        ],
+        failed: [
+          for (final id in json['failed'] as List? ?? const []) id as String,
         ],
       );
 }

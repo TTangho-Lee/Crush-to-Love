@@ -223,13 +223,17 @@ class _TimelineRow extends StatelessWidget {
                           ],
                         ),
                       ),
-                      // 미션 점 (완료 ●, 남음 ○)
+                      // 미션 점 (완료 ●, ✕ 못 함, 남음 ○)
                       Row(
                         spacing: 3,
                         children: [
                           for (final m in week.missions)
                             Icon(
-                              m.done ? Icons.circle : Icons.circle_outlined,
+                              m.done
+                                  ? Icons.circle
+                                  : m.failed
+                                      ? Icons.close
+                                      : Icons.circle_outlined,
                               size: 9,
                               color: m.done ? AppColors.peach : AppColors.warmGray,
                             ),
