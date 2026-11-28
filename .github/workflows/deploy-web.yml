@@ -1,0 +1,50 @@
+# 웹 배포: main에 올리면 flutter build web → GitHub Pages (https://ttangho-lee.github.io/Crush-to-Love/)
+#   처음 한 번: 레포 Settings › Pages › Source를 'GitHub Actions'로
+#   레포 이름이 바뀌면 아래 --base-href도 같이 바꿈 (앞뒤 / 필요)
+#   Actions 탭에서 'Run workflow'로 직접 돌릴 수도 있음
+name: Deploy web
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# 배포는 한 번에 하나만 (새로 올리면 앞의 것 대기)
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # 로컬과 버전이 다르면 channel 대신 flutter-version: '3.xx.x'로 고정
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - run: flutter --version
+      - run: flutter pub get
+      - run: flutter build web --release --base-href /Crush-to-Love/
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: build/web
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
