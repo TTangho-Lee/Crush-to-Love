@@ -1,7 +1,7 @@
 // 짝사랑 상대 목록 · 내 정보 (여러 명을 담고, 화면은 '지금 상대' 한 명씩)
 // 화면에서는 CrushScope.of(context)로 꺼내 씀 (머리글 '지민 ▾', 설정, 온보딩, 대화 분석, 데이트)
-//   상대별: 별명 · D-Day · 사유 · 사이 · 목표 · 만남 빈도 · 연결한 카톡 이름 · 보관 여부
-//   나: 용기 배터리 · 지금 상대 · 연결 안 하기로 한 카톡 이름
+//   상대별: 별명 · D-Day · 사유 · 사이 · 목표 · 만남 빈도 · 연결한 카톡 이름 · 보관 여부 · 말 높이 · 결과
+//   나: 용기 배터리 · 지금 상대 · 연결 안 하기로 한 카톡 이름 · 예시 멘트 웃음 표현
 // 바뀔 때마다 통째로 저장 (CrushStorage, 앱은 ProfileDb), 저장이 안 돼도 앱은 그대로 (Run 창에 출력)
 // 미션 흐름(팀원 MissionStore)에는 main.dart가 지금 상대 Profile을 넘김
 import 'package:flutter/widgets.dart';
@@ -22,12 +22,14 @@ class CrushSnapshot {
     required this.courage,
     this.currentId,
     this.skippedChatNames = const [],
+    this.laughStyle = LaughStyle.auto,
   });
 
   final List<Crush> crushes;
   final int courage;
   final int? currentId;
   final List<String> skippedChatNames;
+  final LaughStyle laughStyle;
 }
 
 /// 상대 목록 저장소 (앱은 ProfileDb, 테스트는 메모리)
@@ -45,6 +47,7 @@ class CrushStore extends ChangeNotifier {
   int _courage = defaultCourage;
   int? _currentId;
   List<String> _skipped = const [];
+  LaughStyle _laughStyle = LaughStyle.auto;
 
   // ---------- 읽기 ----------
 
@@ -67,6 +70,9 @@ class CrushStore extends ChangeNotifier {
 
   /// 내 용기 배터리 0 ~ 100
   int get courage => _courage;
+
+  /// 예시 멘트 웃음 표현 (설정 '나')
+  LaughStyle get laughStyle => _laughStyle;
 
   /// 지금 상대 + 내 용기 (미션 흐름 · 데이트 가이드용), 지금 상대가 없으면 null
   Profile? get profile => current?.toProfile(_courage);
@@ -107,6 +113,7 @@ class CrushStore extends ChangeNotifier {
     _courage = snapshot.courage;
     _currentId = snapshot.currentId;
     _skipped = snapshot.skippedChatNames;
+    _laughStyle = snapshot.laughStyle;
     // 지금 상대가 없거나 보관됐으면 남은 상대 중 첫 번째
     if (current == null) _currentId = active.isEmpty ? null : active.first.id;
     notifyListeners();
@@ -161,6 +168,26 @@ class CrushStore extends ChangeNotifier {
   /// 용기 배터리 바꾸기
   Future<void> setCourage(int courage) async {
     _courage = courage.clamp(0, 100);
+    await _changed();
+  }
+
+  /// 짝사랑 결과 정하기 (피그마 17번)
+  Future<void> setOutcome(int id, CrushOutcome outcome) async {
+    _crushes = [
+      for (final c in _crushes) c.id == id ? c.copyWith(outcome: outcome) : c,
+    ];
+    await _changed();
+  }
+
+  /// D-Day가 지났는데 결과를 아직 안 고른 지금 상대, 없으면 null (피그마 17번을 띄울지)
+  Crush? get awaitingOutcome {
+    final c = current;
+    if (c == null || c.outcome != null) return null;
+    return daysUntil(c.dDay) < 0 ? c : null;
+  }
+
+  Future<void> setLaughStyle(LaughStyle style) async {
+    _laughStyle = style;
     await _changed();
   }
 
@@ -250,12 +277,13 @@ class CrushStore extends ChangeNotifier {
     await _changed();
   }
 
-  /// 전부 지우기 (설정 '데이터 전체 삭제')
+  /// 전부 지우기 (테스트 · 나중에 '데이터 전체 삭제'를 다시 둘 때)
   Future<void> clearAll() async {
     _crushes = const [];
     _courage = defaultCourage;
     _currentId = null;
     _skipped = const [];
+    _laughStyle = LaughStyle.auto;
     notifyListeners();
     try {
       await _storage.clear();
@@ -296,6 +324,7 @@ class CrushStore extends ChangeNotifier {
           courage: _courage,
           currentId: _currentId,
           skippedChatNames: _skipped,
+          laughStyle: _laughStyle,
         ),
       );
     } catch (e) {

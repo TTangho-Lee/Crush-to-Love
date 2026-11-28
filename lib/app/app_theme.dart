@@ -1,5 +1,6 @@
 // 디자인 토큰
-// 글자 크기, 슬라이더 모양 (버튼 모양은 shared/widgets/primary_button.dart, secondary_button.dart)
+// 글자 크기, 슬라이더 모양, 화면 넘김 (버튼 모양은 shared/widgets/primary_button.dart, secondary_button.dart)
+// 화면 넘김: 모든 기기에서 새 화면이 오른쪽에서 밀려 들어오고 앞 화면은 왼쪽으로 조금 밀림 (_SlideTransitions)
 import 'package:material_ui/material_ui.dart';
 
 import '../shared/app_colors.dart';
@@ -12,6 +13,16 @@ abstract final class AppTheme {
       onSurface: AppColors.charcoal,
     ),
     scaffoldBackgroundColor: AppColors.warmWhite,
+    pageTransitionsTheme: const PageTransitionsTheme(
+      builders: {
+        TargetPlatform.android: _SlideTransitions(),
+        TargetPlatform.iOS: _SlideTransitions(),
+        TargetPlatform.windows: _SlideTransitions(),
+        TargetPlatform.macOS: _SlideTransitions(),
+        TargetPlatform.linux: _SlideTransitions(),
+        TargetPlatform.fuchsia: _SlideTransitions(),
+      },
+    ),
     textTheme: const TextTheme(
       // 화면 제목
       headlineSmall: TextStyle(
@@ -63,4 +74,37 @@ abstract final class AppTheme {
       inactiveTickMarkColor: Colors.transparent,
     ),
   );
+}
+
+/// 화면 넘김 슬라이드 (material_ui에 Cupertino 넘김이 없어서 직접)
+class _SlideTransitions extends PageTransitionsBuilder {
+  const _SlideTransitions();
+
+  @override
+  Widget buildTransitions<T>(
+    PageRoute<T> route,
+    BuildContext context,
+    Animation<double> animation,
+    Animation<double> secondaryAnimation,
+    Widget child,
+  ) {
+    final enter = CurvedAnimation(
+      parent: animation,
+      curve: Curves.easeOutCubic,
+      reverseCurve: Curves.easeInCubic,
+    );
+    final cover = CurvedAnimation(
+      parent: secondaryAnimation,
+      curve: Curves.easeOutCubic,
+      reverseCurve: Curves.easeInCubic,
+    );
+    return SlideTransition(
+      position: Tween(begin: const Offset(1, 0), end: Offset.zero).animate(enter),
+      child: SlideTransition(
+        position:
+            Tween(begin: Offset.zero, end: const Offset(-0.3, 0)).animate(cover),
+        child: child,
+      ),
+    );
+  }
 }

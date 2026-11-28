@@ -1,10 +1,11 @@
 // 데이트 가이드 흐름의 데이터 모양 (피그마 10번 고르기, 13번 가이드)
 //   고르는 것(DateChoice): 장소 · 날씨 · 시간 · 인원
-//   가이드에 반영하는 것(GuideBasis): 지금 사이 · 용기 단계 · 목표 · 대화에 자주 나온 주제 · 존댓말 사이
-//   가이드(DateGuide): 항목 6개 + 만난 뒤 보낼 톡
+//   가이드에 반영하는 것(GuideBasis): 지금 사이 · 용기 단계 · 목표 · 대화에 자주 나온 주제 · 존댓말 사이 · 웃음 표현
+//   가이드(DateGuide): 항목 6개 + 만난 뒤 보낼 톡, 말해볼 문장(한마디 팁 · 대화 소재 질문 · 만난 뒤 톡)은 사전 문장과 짝 (맞춤 추천 기록)
 import 'package:material_ui/material_ui.dart';
 
 import '../../shared/models.dart';
+import '../chat/rules/tone.dart';
 import '../chat/rules/topics.dart';
 
 /// 데이트 장소 (피그마 10번)
@@ -97,6 +98,7 @@ class GuideBasis {
     this.topics = const [],
     this.formal = false,
     this.fromChat = false,
+    this.tone = Tone.keep,
   });
 
   /// 지금 사이 (대화 분석이 있으면 그 결과, 없으면 온보딩 · 11번 입력값)
@@ -116,6 +118,9 @@ class GuideBasis {
 
   /// 대화 분석 결과를 반영했으면 true
   final bool fromChat;
+
+  /// 한마디 팁 · 대화 소재 질문 · 만난 뒤 톡의 웃음 표현 (비우면 문장 그대로)
+  final Tone tone;
 }
 
 /// 가이드 문장 한 줄 (date_lines.dart)
@@ -170,6 +175,7 @@ class DateGuide {
     required this.basis,
     required this.items,
     required this.afterLines,
+    this.sayings = const {},
   });
 
   final DateChoice choice;
@@ -180,4 +186,31 @@ class DateGuide {
 
   /// 데이트 끝나고 보낼 톡 (채팅의 '만난 뒤 이어가기' 멘트)
   final List<String> afterLines;
+
+  /// 말해볼 문장: 화면 글자(따옴표 없이, 말투 입힌 것) → 사전 문장 (한마디 팁 · 대화 소재 질문 · 만난 뒤 톡)
+  final Map<String, String> sayings;
+
+  /// 한마디 팁 문장 (따옴표 없이), 없으면 null
+  String? get tip {
+    for (final item in items) {
+      if (item.kind != GuideKind.tip || item.lines.isEmpty) continue;
+      final line = item.lines.first;
+      return line.length >= 2 ? line.substring(1, line.length - 1) : line;
+    }
+    return null;
+  }
+
+  /// 대화 소재의 주제 질문 (따옴표 없이), 없으면 null
+  String? get question {
+    for (final item in items) {
+      if (item.kind != GuideKind.talk) continue;
+      for (final line in item.lines) {
+        final open = line.indexOf('“');
+        if (open >= 0 && line.endsWith('”')) {
+          return line.substring(open + 1, line.length - 1);
+        }
+      }
+    }
+    return null;
+  }
 }

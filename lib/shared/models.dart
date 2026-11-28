@@ -59,6 +59,46 @@ enum Goal {
   final String description;
 }
 
+/// 짝사랑 결과 (피그마 17번에서 D-Day 뒤에 고름)
+enum CrushOutcome {
+  success('성공'),
+  fail('실패');
+
+  const CrushOutcome(this.label);
+
+  final String label;
+}
+
+/// 예시 멘트 웃음 표현 (설정 '나'), 기본은 대화 속 내 말투에 맞춤 (analysis/chat/rules/tone.dart)
+enum LaughStyle {
+  auto('대화에 맞춤'),
+  kk('ㅋㅋ'),
+  hh('ㅎㅎ'),
+  none('안 씀');
+
+  const LaughStyle(this.label);
+
+  final String label;
+}
+
+/// 예시 멘트 말 높이 (설정 '지금 상대'), 기본은 대화 속 내 말투에 맞춤
+enum SpeechLevel {
+  auto('대화에 맞춤'),
+  casual('반말'),
+  formal('존댓말');
+
+  const SpeechLevel(this.label);
+
+  final String label;
+
+  /// 존댓말 멘트를 쓸지 (대화에 맞춤이면 대화에서 본 값 detected)
+  bool formalOr(bool detected) => switch (this) {
+        auto => detected,
+        casual => false,
+        formal => true,
+      };
+}
+
 /// 온보딩 입력값 (피그마 2~6번)
 class Profile {
   const Profile({
@@ -108,6 +148,8 @@ class Crush {
     required this.goal,
     this.chatNames = const [],
     this.archived = false,
+    this.speech = SpeechLevel.auto,
+    this.outcome,
   });
 
   /// 저장용 번호 (CrushStore가 붙임, 1부터)
@@ -132,6 +174,12 @@ class Crush {
   /// 보관했으면 true (지금 상대 목록 · 알림에서 빠지고 기록은 남음)
   final bool archived;
 
+  /// 이 상대에게 보낼 예시 멘트 말 높이
+  final SpeechLevel speech;
+
+  /// 짝사랑 결과, 아직 안 골랐으면 null
+  final CrushOutcome? outcome;
+
   /// 미션 흐름 · 데이트 가이드가 쓰는 입력값 (courage: 내 용기 배터리)
   Profile toProfile(int courage) {
     return Profile(
@@ -153,6 +201,8 @@ class Crush {
     Goal? goal,
     List<String>? chatNames,
     bool? archived,
+    SpeechLevel? speech,
+    CrushOutcome? outcome,
   }) {
     return Crush(
       id: id,
@@ -164,6 +214,8 @@ class Crush {
       goal: goal ?? this.goal,
       chatNames: chatNames ?? this.chatNames,
       archived: archived ?? this.archived,
+      speech: speech ?? this.speech,
+      outcome: outcome ?? this.outcome,
     );
   }
 }

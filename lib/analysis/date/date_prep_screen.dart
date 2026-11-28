@@ -2,12 +2,14 @@
 // 장소 · 날씨 · 시간 · 인원을 칩으로 고르고 '준비 가이드 보기' → 13번
 // 지금 사이 · 용기 · 목표는 지금 상대의 입력값, 마지막 대화 분석이 지금 상대와의 대화면 사이 · 주제는 분석 결과 (guideBasisOf)
 // 지금 상대가 없으면 (예시 화면) 미션 흐름의 예시 입력값
+// 웃음 표현 · 말 높이는 설정에서 고른 값 (대화에 맞춤이면 대화 기준)
 // 고른 조건은 DateStore에 (탭을 옮겨도 그대로)
 import 'package:material_ui/material_ui.dart';
 
 import '../../mission/data/mission_store.dart';
 import '../../onboarding/data/crush_store.dart';
 import '../../shared/app_colors.dart';
+import '../../shared/models.dart';
 import '../../shared/widgets/app_header.dart';
 import '../../shared/widgets/primary_button.dart';
 import '../chat/chat_store.dart';
@@ -34,6 +36,9 @@ class DatePrepScreen extends StatelessWidget {
       useChat: crushes == null ||
           crushes.current == null ||
           (partner != null && crushes.chatBelongsToCurrent(partner)),
+      // 설정에서 고른 웃음 표현(나) · 말 높이(지금 상대)
+      laugh: crushes?.laughStyle ?? LaughStyle.auto,
+      speech: crushes?.current?.speech ?? SpeechLevel.auto,
     );
 
     return Scaffold(
@@ -197,6 +202,7 @@ class _ChipRow extends StatelessWidget {
 }
 
 /// 아이콘 + 이름 칩, 고르면 분홍 바탕 (vertical: 아이콘 위 · 이름 아래)
+/// 칸이 좁으면 이름을 줄이거나 자르지 않고 글자를 조금 작게
 class _Chip extends StatelessWidget {
   const _Chip({
     required this.icon,
@@ -219,11 +225,9 @@ class _Chip extends StatelessWidget {
           fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
         );
     final iconWidget = Icon(icon, size: vertical ? 22 : 16, color: AppColors.charcoal);
-    final labelWidget = Text(
-      label,
-      style: style,
-      maxLines: 1,
-      overflow: TextOverflow.ellipsis,
+    final labelWidget = FittedBox(
+      fit: BoxFit.scaleDown,
+      child: Text(label, style: style, maxLines: 1, softWrap: false),
     );
 
     return GestureDetector(

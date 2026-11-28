@@ -713,7 +713,7 @@ class _ErrorBox extends StatelessWidget {
   }
 }
 
-/// 분석 기간 칩, 고르면 분홍 바탕
+/// 분석 기간 칩, 고르면 분홍 바탕 (칸이 좁으면 줄을 바꾸지 않고 글자를 조금 작게)
 class _RangeChip extends StatelessWidget {
   const _RangeChip({
     required this.label,
@@ -731,6 +731,7 @@ class _RangeChip extends StatelessWidget {
       onTap: onTap,
       child: Container(
         height: 34,
+        padding: const EdgeInsets.symmetric(horizontal: 4),
         alignment: Alignment.center,
         decoration: BoxDecoration(
           color: selected ? AppColors.rose : AppColors.warmWhite,
@@ -739,13 +740,17 @@ class _RangeChip extends StatelessWidget {
             color: selected ? AppColors.peach : AppColors.border,
           ),
         ),
-        child: Text(
-          label,
-          maxLines: 1,
-          style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                color: AppColors.charcoal,
-                fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
-              ),
+        child: FittedBox(
+          fit: BoxFit.scaleDown,
+          child: Text(
+            label,
+            maxLines: 1,
+            softWrap: false,
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: AppColors.charcoal,
+                  fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+                ),
+          ),
         ),
       ),
     );

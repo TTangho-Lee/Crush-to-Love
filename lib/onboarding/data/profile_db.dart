@@ -3,6 +3,7 @@
 // 합칠 때: crush · me 테이블을 팀원 DB로 옮기고, 미션 · 로드맵 테이블에 crush_id 칸을 두기
 // 저장 위치: 앱은 기기 기본 DB 폴더의 profile.db, 웹은 브라우저 저장소(IndexedDB)
 // 버전 1(온보딩 입력값 한 줄, profile 테이블)에서 열면 상대 한 명으로 옮기고 profile 테이블은 지움
+// 버전 2에서 열면 말투 칸(crush.speech_level · me.laugh_style), 버전 3에서 열면 결과 칸(crush.outcome)만 더함
 import 'package:sqflite/sqflite.dart';
 
 import '../../shared/models.dart';
@@ -20,15 +21,21 @@ class ProfileDb implements CrushStorage {
   static Future<Database> _open() async {
     return _db ??= await openDatabase(
       'profile.db',
-      version: 2,
+      version: 4,
       onCreate: (db, version) => _createTables(db),
       onUpgrade: (db, oldVersion, newVersion) async {
-        if (oldVersion < 2) await _migrateFromV1(db);
+        // 버전 1은 옮기면서 최신 표로 만들어서 새 칸까지 다 있음
+        if (oldVersion < 2) {
+          await _migrateFromV1(db);
+          return;
+        }
+        if (oldVersion < 3) await _addToneColumns(db);
+        if (oldVersion < 4) await _addOutcomeColumn(db);
       },
     );
   }
 
-  /// crush: 상대 한 명씩, me: 나 (용기 · 지금 상대 · 연결 안 하기로 한 카톡 이름), 항상 id 1
+  /// crush: 상대 한 명씩 (말 높이 · 결과 포함), me: 나 (용기 · 지금 상대 · 연결 안 하기로 한 카톡 이름 · 웃음 표현), 항상 id 1
   /// 카톡 이름 목록은 줄바꿈으로 이어 붙여 저장 (카톡 이름엔 줄바꿈이 없음)
   static Future<void> _createTables(DatabaseExecutor db) async {
     await db.execute('''
@@ -41,7 +48,9 @@ class ProfileDb implements CrushStorage {
         meetings_per_week INTEGER NOT NULL,
         goal TEXT NOT NULL,
         chat_names TEXT NOT NULL DEFAULT '',
-        archived INTEGER NOT NULL DEFAULT 0
+        archived INTEGER NOT NULL DEFAULT 0,
+        speech_level TEXT NOT NULL DEFAULT 'auto',
+        outcome TEXT
       )
     ''');
     await db.execute('''
@@ -49,9 +58,25 @@ class ProfileDb implements CrushStorage {
         id INTEGER PRIMARY KEY,
         courage INTEGER NOT NULL,
         current_crush INTEGER,
-        skipped_chat_names TEXT NOT NULL DEFAULT ''
+        skipped_chat_names TEXT NOT NULL DEFAULT '',
+        laugh_style TEXT NOT NULL DEFAULT 'auto'
       )
     ''');
+  }
+
+  /// 버전 2 → 3: 말투 칸 더하기
+  static Future<void> _addToneColumns(Database db) async {
+    await db.execute(
+      "ALTER TABLE crush ADD COLUMN speech_level TEXT NOT NULL DEFAULT 'auto'",
+    );
+    await db.execute(
+      "ALTER TABLE me ADD COLUMN laugh_style TEXT NOT NULL DEFAULT 'auto'",
+    );
+  }
+
+  /// 버전 3 → 4: 결과 칸 더하기 (아직 안 골랐으면 NULL)
+  static Future<void> _addOutcomeColumn(Database db) async {
+    await db.execute('ALTER TABLE crush ADD COLUMN outcome TEXT');
   }
 
   /// 버전 1의 입력값 한 줄 → 상대 1명 + 나
@@ -100,11 +125,25 @@ class ProfileDb implements CrushStorage {
             goal: Goal.values.byName(row['goal'] as String),
             chatNames: _split(row['chat_names'] as String),
             archived: row['archived'] == 1,
+            speech: _byName(
+              SpeechLevel.values,
+              row['speech_level'] as String?,
+              SpeechLevel.auto,
+            ),
+            outcome: _byNameOrNull(
+              CrushOutcome.values,
+              row['outcome'] as String?,
+            ),
           ),
       ],
       courage: me?['courage'] as int? ?? defaultCourage,
       currentId: me?['current_crush'] as int?,
       skippedChatNames: _split(me?['skipped_chat_names'] as String? ?? ''),
+      laughStyle: _byName(
+        LaughStyle.values,
+        me?['laugh_style'] as String?,
+        LaughStyle.auto,
+      ),
     );
   }
 
@@ -125,6 +164,8 @@ class ProfileDb implements CrushStorage {
           'goal': c.goal.name,
           'chat_names': c.chatNames.join('\n'),
           'archived': c.archived ? 1 : 0,
+          'speech_level': c.speech.name,
+          'outcome': c.outcome?.name,
         });
       }
       await txn.insert(
@@ -134,13 +175,14 @@ class ProfileDb implements CrushStorage {
           'courage': snapshot.courage,
           'current_crush': snapshot.currentId,
           'skipped_chat_names': snapshot.skippedChatNames.join('\n'),
+          'laugh_style': snapshot.laughStyle.name,
         },
         conflictAlgorithm: ConflictAlgorithm.replace,
       );
     });
   }
 
-  /// 상대 · 나 모두 지우기 (설정 '데이터 전체 삭제')
+  /// 상대 · 나 모두 지우기
   @override
   Future<void> clear() async {
     final db = await _open();
@@ -148,6 +190,22 @@ class ProfileDb implements CrushStorage {
       await txn.delete('crush');
       await txn.delete('me');
     });
+  }
+
+  /// 저장된 이름 → 값, 모르는 이름이면 fallback
+  static T _byName<T extends Enum>(List<T> values, String? name, T fallback) {
+    for (final v in values) {
+      if (v.name == name) return v;
+    }
+    return fallback;
+  }
+
+  /// 저장된 이름 → 값, 없거나 모르는 이름이면 null
+  static T? _byNameOrNull<T extends Enum>(List<T> values, String? name) {
+    for (final v in values) {
+      if (v.name == name) return v;
+    }
+    return null;
   }
 
   static List<String> _split(String joined) => [

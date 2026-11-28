@@ -5,6 +5,7 @@
 //   주제 멘트(topicLines, 존댓말은 formalTopicLines): 대화에 자주 나온 주제가 있으면 첫 줄은 그 주제 멘트
 //     방향마다 어떤 주제 멘트를 쓸지는 Approach.topicKind (말 걸기 · 묻기 · 제안)
 //   같은 대화는 같은 설명 · 멘트, 대화가 달라지면 다른 것이 나오게 seed로 돌려 고름 (pickHint, pickLines)
+//   맞춤 추천을 켜면 지금 시각에 맞는 멘트 전체(linePools)를 학습 순서로 (analysis/chat/line_learning.dart)
 //   멘트에 '○○' 같은 빈칸은 쓰지 않기 (그대로 보내도 어색하지 않게)
 import 'topics.dart';
 
@@ -3496,6 +3497,31 @@ const Map<Topic, TopicLines> formalTopicLines = {
 String pickHint(Approach approach, {required int seed}) {
   final hints = approachHints[approach] ?? const <String>[];
   return hints.isEmpty ? '' : hints[seed % hints.length];
+}
+
+/// 지금 시각에 맞는 멘트 전체 (주제 멘트, 방향 멘트), 주제 멘트 종류가 없거나 주제가 없으면 주제 멘트는 빈 목록
+/// formal: 존댓말 멘트 · 존댓말 주제 멘트만
+(List<Line>, List<Line>) linePools(
+  Approach approach, {
+  required DateTime now,
+  Topic? topic,
+  bool formal = false,
+}) {
+  final kind = approach.topicKind;
+  final topicPool = topic == null || kind == null
+      ? const <Line>[]
+      : [
+          for (final line
+              in (formal ? formalTopicLines : topicLines)[topic]?.of(kind) ??
+                  const <Line>[])
+            if (line.fits(now)) line,
+        ];
+  final generic = [
+    for (final line in (formal ? formalLines : approachLines)[approach] ??
+        const <Line>[])
+      if (line.fits(now)) line,
+  ];
+  return (topicPool, generic);
 }
 
 /// 예시 멘트 고르기 (최대 count개, 겹치지 않게)
