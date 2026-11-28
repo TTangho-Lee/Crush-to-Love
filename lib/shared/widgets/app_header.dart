@@ -5,9 +5,10 @@ import '../../app/crush_switcher.dart';
 import '../../onboarding/data/crush_store.dart';
 import '../app_colors.dart';
 
-/// 모든 화면 맨 위에 들어가는 '♥ DueDate' 머리글
-/// 지금 상대가 있으면 'DueDate' 옆에 '지민 ▾' (누르면 상대 바꾸기 · 설정)
-/// 오른쪽에 '1 / 5', 'D-20' 같은 작은 글자 (label), onBack이 있으면 오른쪽 끝에 되돌아가기 버튼
+/// 모든 화면 맨 위 머리글
+///   탭 첫 화면: 왼쪽 '♥ DueDate' (+ 지금 상대가 있으면 '지민 ▾', 누르면 상대 바꾸기 · 설정)
+///   안으로 들어간 화면(onBack): 왼쪽 위 ‹ 되돌아가기만 (DueDate · 상대 이름 없음, 보통 앱처럼)
+///   오른쪽에 '1 / 5', 'D-20' 같은 작은 글자 (label)
 /// '예시'는 예시 화면(지금 상대가 없을 때)에서만 보임
 ///
 ///     const AppHeader(label: 'D-20')
@@ -21,7 +22,7 @@ class AppHeader extends StatelessWidget {
   /// 지금 상대 '지민 ▾' 보이기 (지금 상대가 없으면 원래 안 보임)
   final bool showCrush;
 
-  /// 되돌아가기 (설정 · 분석 기록처럼 하단 탭 없이 연 화면), 없으면 버튼 없음
+  /// 되돌아가기 (분석 결과 · 설정 · 분석 기록처럼 안으로 들어간 화면), 있으면 왼쪽 위 ‹ 하나만
   final VoidCallback? onBack;
 
   @override
@@ -34,6 +35,25 @@ class AppHeader extends StatelessWidget {
         ? null
         : this.label;
     final onBack = this.onBack;
+
+    // 안으로 들어간 화면: 왼쪽 위 ‹ · 오른쪽 작은 글자
+    if (onBack != null) {
+      return Row(
+        children: [
+          Transform.translate(
+            // 아이콘 둘레 여백만큼 왼쪽으로 (화면 글자와 왼쪽 끝 맞춤)
+            offset: const Offset(-4, 0),
+            child: _HeaderIcon(
+              icon: Icons.arrow_back_ios_new,
+              tooltip: '돌아가기',
+              onTap: onBack,
+            ),
+          ),
+          const Spacer(),
+          if (label != null) Text(label, style: text.labelSmall),
+        ],
+      );
+    }
 
     return Row(
       children: [
@@ -51,17 +71,6 @@ class AppHeader extends StatelessWidget {
         ],
         const Spacer(),
         if (label != null) Text(label, style: text.labelSmall),
-        if (onBack != null)
-          Padding(
-            padding: const EdgeInsets.only(left: 6),
-            child: _HeaderIcon(
-              // U턴 화살표를 옆으로 돌린 모양 (되돌아가기)
-              icon: Icons.u_turn_left,
-              quarterTurns: 1,
-              tooltip: '돌아가기',
-              onTap: onBack,
-            ),
-          ),
       ],
     );
   }
@@ -106,21 +115,17 @@ class _CrushChip extends StatelessWidget {
   }
 }
 
-/// 머리글 오른쪽 작은 아이콘 버튼
+/// 머리글 작은 아이콘 버튼 (되돌아가기)
 class _HeaderIcon extends StatelessWidget {
   const _HeaderIcon({
     required this.icon,
     required this.tooltip,
     required this.onTap,
-    this.quarterTurns = 0,
   });
 
   final IconData icon;
   final String tooltip;
   final VoidCallback onTap;
-
-  /// 아이콘을 90도씩 돌리기
-  final int quarterTurns;
 
   @override
   Widget build(BuildContext context) {
@@ -131,10 +136,7 @@ class _HeaderIcon extends StatelessWidget {
         radius: 18,
         child: Padding(
           padding: const EdgeInsets.all(4),
-          child: RotatedBox(
-            quarterTurns: quarterTurns,
-            child: Icon(icon, size: 20, color: AppColors.charcoal),
-          ),
+          child: Icon(icon, size: 20, color: AppColors.charcoal),
         ),
       ),
     );

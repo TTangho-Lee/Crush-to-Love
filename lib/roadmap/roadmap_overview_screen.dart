@@ -1,6 +1,7 @@
 // 피그마 8번 화면 (전체 로드맵)
 //   맨 위: 목표 진척도 · 진도, 자동 조정했으면 그 이유 한 줄 (7일 동안)
 //   주차 타임라인: 지난 주차 ✓ · 이번 주차(분홍, '지금') · 다음 주차, 날짜 · 미션 점(●○)
+//     미리 다 한 다음 주차도 ✓ (흐리지 않게)
 //   주차를 누르면 14 · 15 · 16번 (하단 탭 없이 전체 화면), '오늘의 미션으로' → 홈 탭
 import 'package:material_ui/material_ui.dart';
 
@@ -121,9 +122,13 @@ class _TimelineRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final text = Theme.of(context).textTheme;
     final now = state == _WeekState.now;
-    final dim = state == _WeekState.next;
+    final allDone = week.missions.isNotEmpty && week.allDone;
+    final dim = state == _WeekState.next && !allDone;
 
-    final dot = switch (state) {
+    // 미리 다 한 다음 주차도 지난 주차처럼 ✓
+    final shown = allDone && !now ? _WeekState.past : state;
+
+    final dot = switch (shown) {
       _WeekState.past => Container(
           width: 22,
           height: 22,

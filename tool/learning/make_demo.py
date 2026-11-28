@@ -112,7 +112,7 @@ def write_dart(rows, path):
         f.write('\n'.join(lines))
 
 
-# ---------- 효과 확인 (Dart dummy_mission_learning.dart와 같은 계산) ----------
+# ---------- 효과 확인 (Dart roadmap_learning.dart와 같은 계산) ----------
 
 def prior22():
     mean, lam = F.prior(1.0, 5.0, 6.0, 6.0)

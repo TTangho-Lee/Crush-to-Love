@@ -11,7 +11,7 @@
 //       학습을 켜면 이 순서를 학습 점수로 다시 줄 세움 (roadmap_learning.dart, 규칙 점수는 특징 하나)
 //       용기 단계보다 어려우면 크게 깎음 (진도가 늦으면 한 단계 위까지는 '용기 내기'로 추천)
 //       대화 분석 추천 방향과 같은 행동 +, 상대 반응이 조심스러우면 먼저 연락 · 약속 · 마음 표현 -
-//       이번 주를 다 했으면 다음 주 미션을 미리
+//       이번 주를 다 했으면 아직 남은 가장 가까운 다음 주차 미션을 미리 (2주 앞서도)
 //   ⑤ 다음 주차 조정(adaptShift): 대화로 본 사이가 더 가깝거나 진도가 빠르면 한 단계 당김,
 //       상대 반응이 조심스러우면 한 단계 늦춤 (당긴 건 반응이 나빠질 때만 되돌림)
 import 'dart:math';
@@ -401,10 +401,11 @@ double missionRuleScore(
 /// 오늘 할 만한 미션 (좋은 순), 다 했으면 빈 목록
 List<TodayPick> rankToday(MissionSituation s, {required DateTime today}) {
   final weeks = s.roadmap.weeks;
+  // 이번 주를 다 했으면 남은 미션이 있는 가장 가까운 다음 주차
   var week = s.week;
   var early = false;
-  if (week.allDone && s.weekIndex + 1 < weeks.length) {
-    week = weeks[s.weekIndex + 1];
+  for (var i = s.weekIndex + 1; week.allDone && i < weeks.length; i++) {
+    week = weeks[i];
     early = true;
   }
 

@@ -1,7 +1,7 @@
-"""lib/dummy 규칙을 파이썬으로 옮긴 것 (시뮬레이션 · 테스트 기대값용)
+"""lib/roadmap 규칙을 파이썬으로 옮긴 것 (시뮬레이션 · 테스트 기대값용)
 
-옮긴 것: 미션 사전(dummy_mission_lines.dart를 직접 읽음) · 로드맵 만들기(dummy_roadmap_generator.dart)
-        · 상황 읽기 · 오늘의 미션 규칙 점수 · 다음 주차 조정(dummy_mission_rules.dart)
+옮긴 것: 미션 사전(mission_lines.dart를 직접 읽음) · 로드맵 만들기(roadmap_generator.dart)
+        · 상황 읽기 · 오늘의 미션 규칙 점수 · 다음 주차 조정(roadmap_rules.dart)
 Dart 쪽을 고치면 여기도 같이 고칠 것 (check_port.py로 기존 테스트 성질 확인)
 """
 from __future__ import annotations
@@ -44,16 +44,16 @@ class Line:
 
 
 def load_lines(root: str = DEFAULT_ROOT) -> dict[str, list[Line]]:
-    """dummy_mission_lines.dart에서 단계별 미션 읽기"""
-    path = os.path.join(root, 'lib', 'dummy', 'dummy_mission_lines.dart')
+    """mission_lines.dart에서 단계별 미션 읽기"""
+    path = os.path.join(root, 'lib', 'roadmap', 'mission_lines.dart')
     text = open(path, encoding='utf-8').read().replace('\r', '')
     out: dict[str, list[Line]] = {}
-    for m in re.finditer(r'DummyStage\.(\w+): \[\n(.*?)\n  \],', text, re.S):
+    for m in re.finditer(r'RoadmapStage\.(\w+): \[\n(.*?)\n  \],', text, re.S):
         stage, body = m.group(1), m.group(2)
         lines = []
         for row in body.split('\n'):
             row = row.strip()
-            if not row.startswith('DummyMissionLine('):
+            if not row.startswith('MissionLine('):
                 continue
             strs = re.findall(r"'((?:[^'\\]|\\.)*)'|\"((?:[^\"\\]|\\.)*)\"", row)
             texts = [a or b for a, b in strs]
@@ -226,11 +226,13 @@ def pick(stage: int, seed: int, can_meet: bool, max_level: int, used: set,
     allowed = lambda i: can_meet or not lines[i].offline
     learned = order is not None
     order = order if learned else rotation_order(len(lines), seed)
+    # 안 쓴 것 중 용기에 가까운 순 (딱 맞음 → 한 단계 아래 → … → 어려운 것) → 앞 주차에 쓴 것
+    fit = lambda level: max_level - level if level <= max_level else 10 + level
+    fits = sorted({fit(l.level) for l in lines})
     tiers = [
-        lambda i: allowed(i) and lines[i].level <= max_level and idof(i) not in used,
-        lambda i: allowed(i) and idof(i) not in used,
-        allowed,
-    ]
+        (lambda f: lambda i: allowed(i) and fit(lines[i].level) == f and idof(i) not in used)(f)
+        for f in fits
+    ] + [allowed]
     picked: list[int] = []
     kept = {m.id for m in keep}
     for tier in tiers:

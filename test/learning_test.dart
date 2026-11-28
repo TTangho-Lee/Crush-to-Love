@@ -273,9 +273,9 @@ void main() {
     expect([
       for (final w in r.weeks) [for (final m in w.missions) m.id],
     ], [
-      ['topic-2', 'topic-3', 'topic-7'],
-      ['follow-0', 'follow-1', 'follow-5'],
-      ['often-3', 'often-4', 'often-7'],
+      ['topic-2', 'topic-4', 'topic-8'],
+      ['follow-1', 'follow-5', 'follow-6'],
+      ['often-0', 'often-3', 'often-7'],
     ]);
   });
 }

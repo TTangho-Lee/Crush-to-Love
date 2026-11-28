@@ -66,7 +66,7 @@ class ConversationResultScreen extends StatelessWidget {
           padding: const EdgeInsets.fromLTRB(24, 16, 24, 24),
           children: [
             // 예시 결과일 때만 오른쪽에 '예시'
-            // 오른쪽 위 되돌아가기 → 9번 (입력한 대화는 그대로)
+            // 왼쪽 위 되돌아가기 → 9번 (입력한 대화는 그대로)
             AppHeader(
               label: stats.isExample ? '예시' : null,
               onBack: () => Navigator.pop(context),

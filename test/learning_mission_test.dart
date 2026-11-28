@@ -101,13 +101,13 @@ void main() {
     expect(canLearnWeeks(learning), isFalse);
     // 지금 앱과 같음 (돌려 고름)
     expect(idsOf(store), [
-      ['topic-2', 'topic-3', 'topic-7'],
-      ['follow-0', 'follow-1', 'follow-5'],
-      ['often-3', 'often-4', 'often-7'],
+      ['topic-2', 'topic-4', 'topic-8'],
+      ['follow-1', 'follow-5', 'follow-6'],
+      ['often-0', 'often-3', 'often-7'],
     ]);
     // 기록이 없으면 이유는 규칙 이유
     final pick = store.todayPick!;
-    expect(pick.mission.id, 'topic-2');
+    expect(pick.mission.id, 'topic-8');
     expect(pick.learned, isFalse);
     // 처음 붙일 땐 이번 주는 그대로 두고 위치만 기억
     expect(learning.meta(composedKey(1)), '1');
@@ -124,18 +124,18 @@ void main() {
     expect(canLearnWeeks(learning), isTrue);
     store.refreshLearning();
     await settle();
-    // 이번 주: [topic-2, topic-3(혼자 준비), topic-7] → 혼자 준비 대신 스토리 답글
+    // 이번 주: [topic-2, topic-4, topic-8] → 질문 · 반응 미션 위주로
     expect(idsOf(store).first, ['topic-1', 'topic-2', 'topic-7']);
     final pick = store.todayPick!;
-    expect(before.mission.id, 'topic-2');
+    expect(before.mission.id, 'topic-8');
     expect(pick.mission.id, 'topic-1');
-    expect(pick.reason, '반응 남기는 미션을 잘 해냈어요');
+    expect(pick.reason, '질문하는 미션을 잘 해냈어요');
     expect(pick.learned, isTrue);
 
     // 잘 해낸 것 · 잘 안 한 것 (가중치가 같으면 특징 순서)
     final (good, bad) = missionTraits(learning);
-    expect([for (final t in good) t.$1], ['마음 표현', '인사', '반응 남기기']);
-    expect([for (final t in bad) t.$1], ['직접 만나기', '혼자 준비', '챙기기']);
+    expect([for (final t in good) t.$1], ['질문', '마음 표현', '저녁에 만나지 않고']);
+    expect([for (final t in bad) t.$1], ['직접 만나기', '인사', '챙기기']);
   });
 
   test('기록: 완료 · 완료 취소 · ↻ · 끝난 주차의 안 한 미션', () async {
@@ -243,9 +243,9 @@ void main() {
     final (store, learning, _) = await stores(enabled: false);
     expect(store.learns, isFalse);
     expect(idsOf(store), [
-      ['topic-2', 'topic-3', 'topic-7'],
-      ['follow-0', 'follow-1', 'follow-5'],
-      ['often-3', 'often-4', 'often-7'],
+      ['topic-2', 'topic-4', 'topic-8'],
+      ['follow-1', 'follow-5', 'follow-6'],
+      ['often-0', 'often-3', 'often-7'],
     ]);
     final pick = store.todayPick!;
     expect(
