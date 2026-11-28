@@ -4,6 +4,8 @@
 //       용기 단계보다 어려운 미션을 해내면 1.5배 (brave)
 //       목표가 높을수록(사귀기) 뒤 단계 미션이 많아서 쉬운 미션 하나로 오르는 폭이 작음
 //       기대 진척도 = 날짜로 보면 지금쯤 했어야 할 만큼, 둘의 차이로 진도 (Pace)
+//       출발점(startRate): 사이에 따라 이미 지나온 단계 몫을 채우고 시작 (얼굴만 0%, 스몰토크 · 사적 연락이면 앞 단계만큼)
+//         화면에 보이는 목표 진척도 = 출발점 + 남은 몫 × 로드맵 진척도 (goalProgress), 진도 판단은 로드맵 진척도로
 //   ③ 한 줄 진단(summaryOf): 위에서부터 처음 맞는 규칙 하나
 //   ④ 오늘의 미션(rankToday): 이번 주 안 한 미션마다 규칙 점수(missionRuleTerms)를 더해 높은 순, 이유는 점수를 가장 많이 올린 규칙
 //       학습을 켜면 이 순서를 학습 점수로 다시 줄 세움 (roadmap_learning.dart, 규칙 점수는 특징 하나)
@@ -68,6 +70,18 @@ String courageName(CourageLevel level) => level.label.split(' · ').first;
 /// 단계 무게 (인사 1 → 마음 전하기 4.5, 뒤 단계일수록 큼)
 double stageWeight(RoadmapStage stage) => 1 + stage.index * 0.5;
 
+/// 출발점 0 ~ 1: 인사 단계부터 목표 단계까지 단계 무게 중 사이로 이미 지나온 몫
+///   사귀기: 얼굴만 0% · 스몰토크 5% · 사적 연락 32%, 썸: 0 · 6 · 40%, 친해지기: 0 · 14 · 64%
+double startRate(Profile profile) {
+  final end = goalStage(profile.goal).index;
+  final start = min(startStageOf(profile.intimacy).index, end);
+  double sum(int to) => [
+        for (var i = 0; i < to; i++) stageWeight(RoadmapStage.values[i]),
+      ].fold(0.0, (a, b) => a + b);
+  final all = sum(end + 1);
+  return all == 0 ? 0 : sum(start) / all;
+}
+
 /// 미션 점수 (진척도 계산용), earned면 해낸 점수 (용기 낸 미션 1.5배)
 double missionPoints(RoadmapMission m, RoadmapStage stage, {bool earned = false}) =>
     (0.75 + 0.25 * m.level) *
@@ -82,6 +96,7 @@ class MissionSituation {
     required this.daysLeft,
     required this.weekIndex,
     required this.progress,
+    this.start = 0,
     required this.expected,
     required this.pace,
     required this.doneCount,
@@ -100,8 +115,14 @@ class MissionSituation {
   /// 이번 주차 순서 (0부터)
   final int weekIndex;
 
-  /// 목표까지 진척도 0 ~ 1
+  /// 로드맵 진척도 0 ~ 1 (로드맵 미션만, 진도 판단용)
   final double progress;
+
+  /// 출발점 0 ~ 1 (사이로 이미 지나온 몫, startRate)
+  final double start;
+
+  /// 화면에 보이는 목표 진척도 0 ~ 1 (출발점 + 남은 몫 × 로드맵 진척도)
+  double get goalProgress => start + (1 - start) * progress;
 
   /// 날짜로 보면 지금쯤 됐을 진척도 0 ~ 1
   final double expected;
@@ -184,6 +205,7 @@ MissionSituation readSituation({
     daysLeft: left,
     weekIndex: weekIndex,
     progress: progress,
+    start: startRate(profile),
     expected: expectedRate,
     pace: pace,
     doneCount: done,

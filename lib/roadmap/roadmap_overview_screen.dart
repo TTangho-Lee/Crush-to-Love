@@ -48,7 +48,7 @@ class RoadmapOverviewScreen extends StatelessWidget {
               spacing: 6,
               children: [
                 Text(
-                  '${s.profile.goal.label} 진척도 ${(s.progress * 100).round()}%',
+                  '${s.profile.goal.label} 진척도 ${(s.goalProgress * 100).round()}%',
                   style: text.bodyMedium,
                 ),
                 Pill(

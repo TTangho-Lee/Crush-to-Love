@@ -1,5 +1,6 @@
 // 미션 화면들이 같이 쓰는 작은 위젯
 //   SegmentBar: 주차마다 칸을 나눈 진척도 막대 (칸 너비 = 그 주차 점수, 뒤 주차일수록 넓음)
+//     출발점이 있으면 맨 앞에 꽉 찬 칸 하나 (사이로 이미 지나온 몫)
 //   MissionMeta: 필요한 용기 ●●○ · 하는 방법(톡으로 · 만나서 · 혼자) · 용기 보너스
 //   Pill: 아이콘 + 짧은 글자 칩
 //   dateRangeOf: '11.20 ~ 11.26', 마지막 주차는 끝에 'D-Day'
@@ -13,18 +14,33 @@ import 'roadmap_store.dart';
 
 /// 주차별로 나눈 진척도 막대
 class SegmentBar extends StatelessWidget {
-  const SegmentBar({super.key, required this.weeks, required this.currentIndex});
+  const SegmentBar({
+    super.key,
+    required this.weeks,
+    required this.currentIndex,
+    this.start = 0,
+  });
 
   final List<RoadmapWeek> weeks;
+
+  /// 출발점 0 ~ 1 (맨 앞 꽉 찬 칸 너비)
+  final double start;
 
   /// 이번 주차 순서 (테두리로 표시)
   final int currentIndex;
 
   @override
   Widget build(BuildContext context) {
+    final all = weeks.fold(0.0, (s, w) => s + _points(w));
+    final head = start <= 0 || start >= 1 ? 0.0 : all * start / (1 - start);
     return Row(
       spacing: 3,
       children: [
+        if (head > 0)
+          Expanded(
+            flex: (head * 10).round().clamp(1, 100000),
+            child: const _Segment(fill: 1, current: false),
+          ),
         for (var i = 0; i < weeks.length; i++)
           Expanded(
             flex: (_points(weeks[i]) * 10).round().clamp(1, 1000),
