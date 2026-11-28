@@ -1,5 +1,5 @@
 // 미션 학습 분야: 문맥 · 미션 → 특징 φ (22개), 사전, 학습 이유 문장
-//   팀원 미션 흐름으로 옮길 땐 MissionContext · MissionArm만 만들어 넘기면 됨 (dummy는 dummy_mission_learning.dart)
+//   팀원 미션 흐름으로 옮길 땐 MissionContext · MissionArm만 만들어 넘기면 됨 (지금 흐름은 roadmap/roadmap_learning.dart)
 //   φ: 규칙 점수/5 · 1 · 용기 차이 · 대면 · 대면×주말 · 대면×만남 빈도 · 태그 9개
 //      · 연락×대화 뜸함 · 과감×호감 높음 · 과감×호감 낮음 · 어려움×진도 늦음 · 가벼움×쉰 뒤 · 온라인×저녁 · 어려움×D-Day 가까움
 //   사전: 규칙 점수에만 가중치 1 (처음엔 지금 규칙 순서), 태그 · 대면은 λ 2 (빨리 배움), 나머지 λ 6
@@ -9,7 +9,7 @@ import 'learning_store.dart';
 /// 미션 분야 이름 (기록 · 모델 key)
 const missionDomain = 'mission';
 
-/// 미션 태그 이름 (dummy MissionTag.name과 같은 순서)
+/// 미션 태그 이름 (roadmap MissionTag.name과 같은 순서)
 const missionTagNames = [
   'prep',
   'greet',
@@ -63,7 +63,7 @@ class MissionContext {
     this.hour,
   });
 
-  /// 이 미션의 규칙 점수 (dummy_mission_rules.dart ruleTerms 합)
+  /// 이 미션의 규칙 점수 (roadmap_rules.dart ruleTerms 합)
   final double rule;
 
   /// 부담 없이 할 수 있는 용기 최대 1 ~ 3

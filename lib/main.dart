@@ -19,6 +19,7 @@ import 'learning/outcome_reward.dart';
 import 'mission/data/mission_store.dart';
 import 'onboarding/data/crush_store.dart';
 import 'onboarding/start_screen.dart';
+import 'roadmap/roadmap_store.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -43,18 +44,38 @@ Future<void> main() async {
     debugPrint('학습 기록 불러오기 실패: $e');
   }
 
-  runApp(DueDateApp(crushes: crushes, learning: learning));
+  // 상대별 로드맵 (lib/roadmap, roadmap.db)
+  final roadmaps = RoadmapStore();
+  try {
+    await roadmaps.load();
+  } catch (e) {
+    debugPrint('로드맵 불러오기 실패: $e');
+  }
+
+  runApp(DueDateApp(
+    crushes: crushes,
+    roadmaps: roadmaps,
+    learning: learning,
+  ));
 }
 
 /// 학습 분야 (미션 · 멘트)
 const learningDomains = <LearnDomain>[MissionDomain(), LineDomain()];
 
 class DueDateApp extends StatefulWidget {
-  const DueDateApp({super.key, this.crushes, this.learning});
+  const DueDateApp({
+    super.key,
+    this.crushes,
+    this.roadmaps,
+    this.learning,
+  });
 
   /// 불러 둔 상대 목록, 지금 상대가 있으면 홈(피그마 7번) · 없으면 시작 화면(피그마 1번)부터
   /// 비우면 빈 목록 (테스트)
   final CrushStore? crushes;
+
+  /// 불러 둔 로드맵 (lib/roadmap), 비우면 빈 목록 (테스트)
+  final RoadmapStore? roadmaps;
 
   /// 불러 둔 학습 기록, 비우면 메모리에만 (테스트)
   final LearningStore? learning;
@@ -64,9 +85,11 @@ class DueDateApp extends StatefulWidget {
 }
 
 class _DueDateAppState extends State<DueDateApp> {
-  // 흐름별 데이터. 화면에서는 CrushScope / MissionScope / ChatScope / DateScope.of(context)로 꺼내 씀
+  // 흐름별 데이터. 화면에서는 CrushScope / MissionScope / RoadmapScope / ChatScope / DateScope.of(context)로 꺼내 씀
   late final CrushStore _crushStore = widget.crushes ?? CrushStore();
   final _missionStore = MissionStore();
+  late final RoadmapStore _roadmapStore =
+      widget.roadmaps ?? RoadmapStore();
   final _chatStore = ChatStore();
   final _dateStore = DateStore();
   late final LearningStore _learningStore = widget.learning ??
@@ -101,9 +124,13 @@ class _DueDateAppState extends State<DueDateApp> {
     _forgetRemoved();
     _chatReward.attach();
     _outcomeReward.attach();
+    // 지금 상대가 바뀌면 그 상대 로드맵으로 (없으면 만들고, 입력값이 바뀌면 다시 짬)
+    // 대화 분석이 바뀌면 다음 주차 조정 · 오늘의 미션 고르기에 반영, 맞춤 추천은 attach 전에 붙임
     // 데이트 가이드의 말해볼 문장도 멘트 학습 순서로
     _dateStore.attachLearning(_learningStore);
-    // TODO(합치기): 팀원 미션 흐름에 맞춤 추천 붙이기 (MissionArm · MissionContext를 만들어 learning에 기록)
+    _roadmapStore.attachLearning(_learningStore);
+    _roadmapStore.attach(_crushStore);
+    _roadmapStore.attachChat(_chatStore);
     // 안드로이드 공유로 받은 카톡 대화 → 대화 탭(피그마 9번)에서 바로 분석
     ShareReceiver.listen((text) {
       _chatStore.receiveSharedText(text);
@@ -149,6 +176,8 @@ class _DueDateAppState extends State<DueDateApp> {
     _crushStore.removeListener(_forgetRemoved);
     _chatReward.dispose();
     _outcomeReward.dispose();
+    // 상대 목록에 붙어 있어서 먼저
+    _roadmapStore.dispose();
     _crushStore.dispose();
     _missionStore.dispose();
     _chatStore.dispose();
@@ -165,22 +194,26 @@ class _DueDateAppState extends State<DueDateApp> {
         store: _learningStore,
         child: MissionScope(
           store: _missionStore,
-          child: ChatScope(
-            store: _chatStore,
-            child: DateScope(
-              store: _dateStore,
-              child: MaterialApp(
-                title: 'DueDate',
-                theme: AppTheme.light,
-                // 오른쪽 위 'DEBUG' 띠 숨김
-                debugShowCheckedModeBanner: false,
-                // 달력 같은 기본 위젯 글자를 한국어로
-                locale: const Locale('ko'),
-                supportedLocales: const [Locale('ko')],
-                localizationsDelegates: GlobalMaterialLocalizations.delegates,
-                home: _crushStore.current != null
-                    ? const MainShell()
-                    : const StartScreen(),
+          child: RoadmapScope(
+            store: _roadmapStore,
+            child: ChatScope(
+              store: _chatStore,
+              child: DateScope(
+                store: _dateStore,
+                child: MaterialApp(
+                  title: 'DueDate',
+                  theme: AppTheme.light,
+                  // 오른쪽 위 'DEBUG' 띠 숨김
+                  debugShowCheckedModeBanner: false,
+                  // 달력 같은 기본 위젯 글자를 한국어로
+                  locale: const Locale('ko'),
+                  supportedLocales: const [Locale('ko')],
+                  localizationsDelegates:
+                      GlobalMaterialLocalizations.delegates,
+                  home: _crushStore.current != null
+                      ? const MainShell()
+                      : const StartScreen(),
+                ),
               ),
             ),
           ),
